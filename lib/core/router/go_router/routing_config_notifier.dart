@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:hiddify/core/model/environment.dart';
 import 'package:hiddify/core/preferences/general_preferences.dart';
 import 'package:hiddify/core/router/adaptive_layout/my_adaptive_layout.dart';
 import 'package:hiddify/core/router/bottom_sheets/bottom_sheets_notifier.dart';
@@ -76,7 +77,21 @@ class RoutingConfigNotifier extends _$RoutingConfigNotifier {
           url = state.uri.queryParameters['url'];
         }
 
-        if (!introCompleted) {
+        // family_vpn fork: when a subscription URL is baked at build time
+        // (--dart-define=baked_sub_url=...), inject it as the deep-link URL
+        // on first launch (no profile yet, no inbound URL). Once any profile
+        // exists this branch is inert. Also skips the intro/onboarding so
+        // the user lands directly on the home screen with the AddProfile
+        // bottom sheet pre-filled — one tap to start using the app.
+        final bakedFlow = Environment.hasBakedSubscription;
+        if (bakedFlow && url == null) {
+          final hasProfile = ref.read(hasAnyProfileProvider).valueOrNull ?? false;
+          if (!hasProfile) {
+            url = Environment.bakedSubscriptionUrl;
+          }
+        }
+
+        if (!introCompleted && !bakedFlow) {
           return url != null ? '/intro?url=$url' : '/intro';
         } else if (isIntro) {
           if (url != null)

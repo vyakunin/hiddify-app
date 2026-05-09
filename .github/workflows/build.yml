@@ -250,6 +250,7 @@ jobs:
       - name: Build ${{ matrix.platform }}
         env:
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          BAKED_SUB_URL: ${{ secrets.BAKED_SUB_URL }}
         run: |
           make ${{ matrix.platform }}-release
 

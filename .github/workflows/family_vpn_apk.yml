@@ -1,0 +1,104 @@
+# family_vpn fork — build a single per-relative Android APK with a
+# subscription URL baked in via --dart-define.
+#
+# Trigger via the GitHub UI: Actions → "family_vpn APK" → Run workflow.
+# Provide:
+#   sub_url   = e.g. https://assets.visa-bulletin.us/sub/<their_token>
+#   user_name = used in the artifact name only, e.g. "alice"
+#
+# The resulting APK has the URL baked in. On first launch the app skips
+# the intro and shows AddProfile pre-filled — one tap to enable.
+#
+# Repo secret BAKED_SUB_URL is unused by this workflow (it's only used
+# by the regular build.yml when the Hiddify maintainers' release workflow
+# fires). Per-build URL comes from workflow input.
+
+name: family_vpn APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      sub_url:
+        description: "Subscription URL to bake into the APK (e.g. https://assets.visa-bulletin.us/sub/<token>)"
+        type: string
+        required: true
+      user_name:
+        description: "User name for the artifact (alphanumeric, used in filename only)"
+        type: string
+        required: false
+        default: "operator"
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      IS_GITHUB_ACTIONS: 1
+      CHANNEL: "dev"
+      FLUTTER_VERSION: '3.38.5'
+      NDK_VERSION: r28c
+      UPLOAD_ARTIFACT: "true"
+      TAG_NAME: "family_vpn-${{ inputs.user_name }}"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: 17
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+
+      - name: Get dependencies
+        run: |
+          flutter pub get
+
+      - name: Generate code
+        run: |
+          dart run build_runner build --delete-conflicting-outputs
+
+      - name: Setup Android signing
+        if: ${{ secrets.KEYSTORE_FILE != '' }}
+        env:
+          KEYSTORE_FILE_BASE64: ${{ secrets.KEYSTORE_FILE }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          echo "$KEYSTORE_FILE_BASE64" | base64 -d > android/app/key.jks
+          cat > android/key.properties <<EOF
+          storePassword=$KEYSTORE_PASSWORD
+          keyPassword=$KEY_PASSWORD
+          keyAlias=$KEY_ALIAS
+          storeFile=key.jks
+          EOF
+
+      - name: Build APK
+        env:
+          BAKED_SUB_URL: ${{ inputs.sub_url }}
+        run: |
+          flutter build apk \
+            --release \
+            --target-platform=android-arm,android-arm64,android-x64 \
+            --split-per-abi \
+            --dart-define=baked_sub_url="$BAKED_SUB_URL"
+
+      - name: Rename APKs to include user name
+        run: |
+          mkdir -p out
+          USER="${{ inputs.user_name }}"
+          for apk in build/app/outputs/flutter-apk/*.apk; do
+            base=$(basename "$apk" .apk)
+            cp "$apk" "out/${base}-${USER}.apk"
+          done
+          ls -la out/
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: family_vpn-${{ inputs.user_name }}-apks
+          path: out/*.apk
+          retention-days: 30

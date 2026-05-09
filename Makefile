@@ -61,8 +61,8 @@ else
 	TARGET=lib/main.dart
 endif
 
-BUILD_ARGS=--dart-define sentry_dsn=$(SENTRY_DSN)
-DISTRIBUTOR_ARGS=--skip-clean --build-target $(TARGET) --build-dart-define sentry_dsn=$(SENTRY_DSN)
+BUILD_ARGS=--dart-define sentry_dsn=$(SENTRY_DSN) --dart-define baked_sub_url=$(BAKED_SUB_URL)
+DISTRIBUTOR_ARGS=--skip-clean --build-target $(TARGET) --build-dart-define sentry_dsn=$(SENTRY_DSN) --build-dart-define baked_sub_url=$(BAKED_SUB_URL)
 
 
 
@@ -272,7 +272,8 @@ android-apk-release:
 	  --skip-clean \
 	  --build-target=$(TARGET) \
 	  --build-target-platform=android-arm,android-arm64,android-x64 \
-	  --build-dart-define=sentry_dsn=$(SENTRY_DSN)
+	  --build-dart-define=sentry_dsn=$(SENTRY_DSN) \
+	  --build-dart-define=baked_sub_url=$(BAKED_SUB_URL)
 	ls -R build/app/outputs
 
 android-aab-release:
