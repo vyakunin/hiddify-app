@@ -52,10 +52,10 @@ class SessionStatsPanel extends HookConsumerWidget {
           : Duration.zero;
 
       final stats = statsAsync.valueOrNull;
-      final downTotal = stats?.transport.downlinkTotal.toInt() ?? 0;
-      final upTotal = stats?.transport.uplinkTotal.toInt() ?? 0;
-      final downSpeed = stats?.transport.downlink.toInt() ?? 0;
-      final upSpeed = stats?.transport.uplink.toInt() ?? 0;
+      final downTotal = stats?.downlinkTotal.toInt() ?? 0;
+      final upTotal = stats?.uplinkTotal.toInt() ?? 0;
+      final downSpeed = stats?.downlink.toInt() ?? 0;
+      final upSpeed = stats?.uplink.toInt() ?? 0;
       final latencyMs = activeProxy?.urlTestDelay ?? 0;
 
       body = Column(
