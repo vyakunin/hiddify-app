@@ -48,14 +48,6 @@ jobs:
           # falling back to whatever subosito resolves on stable.
           flutter-version: '3.38.x'
 
-      - name: Get dependencies
-        run: |
-          flutter pub get
-
-      - name: Generate code
-        run: |
-          dart run build_runner build --delete-conflicting-outputs
-
       - name: Setup Android signing (skipped if keystore not configured)
         env:
           KEYSTORE_FILE_BASE64: ${{ secrets.KEYSTORE_FILE }}
@@ -76,25 +68,30 @@ jobs:
             echo "No keystore secret set; APK will be debug-signed (sideload-friendly, no Play Store-grade signing)."
           fi
 
+      - name: Prepare (flutter pub get + dart code-gen + download libbox AAR)
+        run: make android-apk-prepare
+
+      - name: Install fastforge (used by Makefile's android-apk-release)
+        run: dart pub global activate fastforge
+
       - name: Build APK
         env:
           BAKED_SUB_URL: ${{ inputs.sub_url }}
+          SENTRY_DSN: ""
         run: |
-          flutter build apk \
-            --release \
-            --target-platform=android-arm,android-arm64,android-x64 \
-            --split-per-abi \
-            --dart-define=baked_sub_url="$BAKED_SUB_URL"
+          export PATH="$HOME/.pub-cache/bin:$PATH"
+          make android-apk-release
 
       - name: Rename APKs to include user name
         run: |
           mkdir -p out
           USER="${{ inputs.user_name }}"
-          for apk in build/app/outputs/flutter-apk/*.apk; do
-            base=$(basename "$apk" .apk)
-            cp "$apk" "out/${base}-${USER}.apk"
-          done
-          ls -la out/
+          # fastforge writes APKs to dist/<version>/*.apk
+          find dist -name '*.apk' -print -exec sh -c '
+            base=$(basename "$1" .apk)
+            cp "$1" "out/${base}-${USER}.apk"
+          ' _ {} \;
+          ls -la out/ || echo "(no APKs found — check upstream build target output path)"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
