@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:hiddify/core/app_info/app_info_provider.dart';
 import 'package:hiddify/core/localization/translations.dart';
+import 'package:hiddify/core/model/environment.dart';
 import 'package:hiddify/core/router/bottom_sheets/bottom_sheets_notifier.dart';
 import 'package:hiddify/features/home/widget/connection_button.dart';
+import 'package:hiddify/features/home/widget/session_stats_panel.dart';
 import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
 import 'package:hiddify/features/profile/widget/profile_tile.dart';
 import 'package:hiddify/features/proxy/active/active_proxy_card.dart';
@@ -24,62 +26,53 @@ class HomePage extends HookConsumerWidget {
     final activeProfile = ref.watch(activeProfileProvider);
 
     return Scaffold(
-      appBar: AppBar(
-        // leading: (RootScaffold.stateKey.currentState?.hasDrawer ?? false) && showDrawerButton(context)
-        //     ? DrawerButton(
-        //         onPressed: () {
-        //           RootScaffold.stateKey.currentState?.openDrawer();
-        //         },
-        //       )
-        //     : null,
-        title: Row(
-          children: [
-            Assets.images.logo.svg(height: 24),
-            const Gap(8),
-            Text.rich(
-              TextSpan(
+      // family_vpn fork: in minimal mode, drop the entire AppBar — no logo,
+      // no version label, no settings/add icons. Just the body with the big
+      // Connect button.
+      appBar: Environment.minimalUi
+          ? null
+          : AppBar(
+              title: Row(
                 children: [
-                  TextSpan(text: t.common.appTitle),
-                  const TextSpan(text: " "),
-                  const WidgetSpan(child: AppVersionLabel(), alignment: PlaceholderAlignment.middle),
+                  Assets.images.logo.svg(height: 24),
+                  const Gap(8),
+                  Text.rich(
+                    TextSpan(
+                      children: [
+                        TextSpan(text: t.common.appTitle),
+                        const TextSpan(text: " "),
+                        const WidgetSpan(
+                          child: AppVersionLabel(),
+                          alignment: PlaceholderAlignment.middle,
+                        ),
+                      ],
+                    ),
+                  ),
                 ],
               ),
+              actions: [
+                Semantics(
+                  key: const ValueKey("profile_quick_settings"),
+                  label: t.pages.home.quickSettings,
+                  child: IconButton(
+                    icon: Icon(Icons.tune_rounded, color: theme.colorScheme.primary),
+                    onPressed: () =>
+                        ref.read(bottomSheetsNotifierProvider.notifier).showQuickSettings(),
+                  ),
+                ),
+                const Gap(8),
+                Semantics(
+                  key: const ValueKey("profile_add_button"),
+                  label: t.pages.profiles.add,
+                  child: IconButton(
+                    icon: Icon(Icons.add_rounded, color: theme.colorScheme.primary),
+                    onPressed: () =>
+                        ref.read(bottomSheetsNotifierProvider.notifier).showAddProfile(),
+                  ),
+                ),
+                const Gap(8),
+              ],
             ),
-          ],
-        ),
-        actions: [
-          // IconButton(
-          //     onPressed: () => const QuickSettingsRoute().push(context),
-          //     icon: const Icon(FluentIcons.options_24_filled),
-          //     material: (context, platform) => MaterialIconButtonData(
-          //           tooltip: t.config.quickSettings,
-          //         )),
-          // IconButton(
-          //     onPressed: () => const AddProfileRoute().push(context),
-          //     icon: const Icon(FluentIcons.add_circle_24_filled),
-          //     material: (context, platform) => MaterialIconButtonData(
-          //           tooltip: t.profile.add.buttonText,
-          //         )),
-          Semantics(
-            key: const ValueKey("profile_quick_settings"),
-            label: t.pages.home.quickSettings,
-            child: IconButton(
-              icon: Icon(Icons.tune_rounded, color: theme.colorScheme.primary),
-              onPressed: () => ref.read(bottomSheetsNotifierProvider.notifier).showQuickSettings(),
-            ),
-          ),
-          const Gap(8),
-          Semantics(
-            key: const ValueKey("profile_add_button"),
-            label: t.pages.profiles.add,
-            child: IconButton(
-              icon: Icon(Icons.add_rounded, color: theme.colorScheme.primary),
-              onPressed: () => ref.read(bottomSheetsNotifierProvider.notifier).showAddProfile(),
-            ),
-          ),
-          const Gap(8),
-        ],
-      ),
       body: Container(
         decoration: BoxDecoration(
           image: DecorationImage(
@@ -108,29 +101,38 @@ class HomePage extends HookConsumerWidget {
                     // AsyncData(value: final profile?) =>
                     MultiSliver(
                       children: [
-                        // const Gap(100),
-                        switch (activeProfile) {
-                          AsyncData(value: final profile?) => ProfileTile(
-                            profile: profile,
-                            isMain: true,
-                            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                            color: Theme.of(context).colorScheme.surfaceContainer,
-                          ),
-                          _ => const Text(""),
-                        },
-                        const SliverFillRemaining(
+                        // family_vpn fork: hide the active-profile tile in
+                        // minimal mode (relatives don't need to see the
+                        // subscription URL/title).
+                        if (!Environment.minimalUi)
+                          switch (activeProfile) {
+                            AsyncData(value: final profile?) => ProfileTile(
+                              profile: profile,
+                              isMain: true,
+                              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                              color: Theme.of(context).colorScheme.surfaceContainer,
+                            ),
+                            _ => const Text(""),
+                          },
+                        SliverFillRemaining(
                           hasScrollBody: false,
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Expanded(
+                              const Expanded(
                                 child: Column(
                                   mainAxisSize: MainAxisSize.min,
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [ConnectionButton(), ActiveProxyDelayIndicator()],
                                 ),
                               ),
-                              ActiveProxyFooter(),
+                              // family_vpn fork: friendly Russian stats panel
+                              // replaces the upstream ActiveProxyFooter when
+                              // minimal UI is on.
+                              if (Environment.minimalUi)
+                                const SessionStatsPanel()
+                              else
+                                const ActiveProxyFooter(),
                             ],
                           ),
                         ),

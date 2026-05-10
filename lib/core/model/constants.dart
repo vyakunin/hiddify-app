@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:hiddify/core/model/environment.dart';
 
 abstract class Constants {
-  static const appName = "Hiddify";
+  // family_vpn fork: prefer Environment.appDisplayName at build time;
+  // fallback only if no --dart-define provided (which never happens in our CI).
+  static String get appName =>
+      Environment.appDisplayName.isNotEmpty ? Environment.appDisplayName : "Hiddify";
   static const githubUrl = "https://github.com/hiddify/hiddify-next";
   static const licenseUrl = "https://github.com/hiddify/hiddify-next?tab=License-1-ov-file#readme";
   static const githubReleasesApiUrl = "https://api.github.com/repos/hiddify/hiddify-next/releases";

@@ -80,7 +80,10 @@ jobs:
             --target-platform=android-arm,android-arm64,android-x64 \
             --split-per-abi \
             --dart-define=baked_sub_url="$BAKED_SUB_URL" \
-            --dart-define=sentry_dsn="$SENTRY_DSN"
+            --dart-define=sentry_dsn="$SENTRY_DSN" \
+            --dart-define=minimal_ui=true \
+            --dart-define=app_display_name=Заметки \
+            --dart-define=force_locale=ru
           echo
           echo "=== built APKs ==="
           ls -la build/app/outputs/flutter-apk/
