@@ -17,15 +17,48 @@ part 'rules_notifier.g.dart';
 class RulesNotifier extends _$RulesNotifier with AppLogger {
   late File file;
 
+  // family_vpn: Reality transport is TCP-only, so QUIC (UDP/443) packets can
+  // never reach the proxy. When a browser/app tries QUIC first (FB, Google,
+  // etc.) the connection just times out, *then* falls back to HTTP/2 — that's
+  // the "site won't load" / "image preview missing" symptom. Force the
+  // fallback to happen immediately by blocking QUIC at the route layer.
+  static const _familyVpnDefaultRuleName = 'Block QUIC (family_vpn default)';
+
+  Rule _buildDefaultBlockQuicRule() {
+    return Rule()
+      ..name = _familyVpnDefaultRuleName
+      ..outbound = Outbound.block
+      ..network = Network.udp
+      ..portRanges.add('443')
+      ..protocols.add(Protocol.quic)
+      ..enabled = true
+      ..listOrder = 0;
+  }
+
   @override
   List<Rule> build() {
     final directories = ref.watch(appDirectoriesProvider).requireValue;
     file = File('${directories.baseDir.path}/route_rule.proto');
-    if (file.existsSync()) {
-      return RouteRule.fromBuffer(file.readAsBytesSync()).rules;
-    } else {
-      return <Rule>[];
+    final existing = file.existsSync()
+        ? RouteRule.fromBuffer(file.readAsBytesSync()).rules
+        : <Rule>[];
+    if (!existing.any((r) => r.name == _familyVpnDefaultRuleName)) {
+      // Insert at the top so it runs before any user-defined rule.
+      final reordered = [_buildDefaultBlockQuicRule(), ...existing];
+      for (var i = 0; i < reordered.length; i++) {
+        reordered[i].listOrder = i;
+      }
+      // Best-effort persist; if it fails, in-memory state is still correct
+      // for this run.
+      try {
+        if (!file.parent.existsSync()) {
+          file.parent.createSync(recursive: true);
+        }
+        file.writeAsBytesSync(RouteRule(rules: reordered).writeToBuffer());
+      } catch (_) {}
+      return reordered;
     }
+    return existing;
   }
 
   Future<void> addRule(Rule rule) async {
