@@ -60,7 +60,10 @@ endif
 # with_naive_outbound and removes the upstream `-gcflags "all=-N -l"` debug
 # flag — arm64 .so goes from ~78 MB to ~52 MB. AAR is arm64-only.
 ifeq ($(CHANNEL),slim)
-	CORE_URL=https://github.com/vyakunin/hiddify-core/releases/download/v4.1.0-slim.2
+	# Pin to slim.1: the verified-working baseline (with_clash_api +
+	# with_grpc still in). slim.2 dropped both, saved only 88 KB, and
+	# wasn't worth the FFI risk so we don't promote it.
+	CORE_URL=https://github.com/vyakunin/hiddify-core/releases/download/v4.1.0-slim.1
 endif
 
 ifeq ($(CHANNEL),prod)
