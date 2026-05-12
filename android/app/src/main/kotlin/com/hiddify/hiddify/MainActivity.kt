@@ -60,10 +60,14 @@ class MainActivity : FlutterFragmentActivity(), ServiceConnection.Callback {
 
     @SuppressLint("NewApi")
     fun startService() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !ServiceNotification.checkPermission()) {
-            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-            return
-        }
+        // family_vpn fork: skip POST_NOTIFICATIONS dialog entirely.
+        // Why: it was the first of TWO sequential system dialogs (notif then
+        // VPN-permission) on first launch, each blocking startService0() until
+        // tapped. Dart's setupBackground polling loop times out after ~22s and
+        // surfaces "Непредвиденный сбой / starting background core..." — the
+        // user has to tap connect again. Foreground VPN services run fine
+        // without POST_NOTIFICATIONS — the status-bar notif just isn't visible,
+        // which is fine for relatives. Removing this halves the dialog chain.
         startService0()
     }
 

@@ -115,34 +115,42 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
 
     _isBgClientAvailable = true;
     loggy.info("Waiting for starting core");
-    for (var i = 0; i < 20; i++) {
+    // family_vpn fork: extended wait loop + early-exit on port-open.
+    // Original 20 iterations × ~1.2s ≈ 24s wasn't enough for first-time users
+    // who have to tap through the Android VPN-permission system dialog before
+    // the background service can actually start. We've also removed the
+    // POST_NOTIFICATIONS dialog upstream (MainActivity.kt) but VPN-permission
+    // still requires a user tap that takes 3-15s in practice. 50 iters
+    // (~60s worst case) covers slow grants without making denial cases
+    // unbearable; the inner port-open check exits within ~200ms of the
+    // service actually coming up so happy-path latency is unchanged.
+    const int maxIterations = 50;
+    for (var i = 0; i < maxIterations; i++) {
+      // Fast path: if the bg gRPC port is open, the service is up — return.
+      if (await isPortOpen("127.0.0.1", portBack)) {
+        loggy.info("bg port $portBack opened after $i iterations");
+        return const CoreStarted();
+      }
       try {
         final res = await _status.get(timeout: const Duration(seconds: 1));
-
         switch (res) {
           case CoreStarted():
-            break;
+            return const CoreStarted();
           case CoreStopped():
             if (res.alert != null) {
               return res;
             }
-
           case CoreStopping():
-          // return res;
           case CoreStarting():
         }
         await Future.delayed(const Duration(milliseconds: 200));
       } on TimeoutException {
-        // just retry
+        // No status arrived — loop and re-check port.
       }
     }
-    loggy.info("Waiting for starting core finished");
-
-    if (!await waitUntilPort(portBack, true, null, maxTry: 10)) {
-      await stopMethodChannel();
-      return const CoreStatus.stopped(alert: CoreAlert.startService, message: "starting background core...");
-    }
-    return const CoreStarted();
+    loggy.info("Waiting for starting core: gave up after $maxIterations iterations");
+    await stopMethodChannel();
+    return const CoreStatus.stopped(alert: CoreAlert.startService, message: "starting background core...");
   }
 
   @override
