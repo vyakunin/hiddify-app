@@ -23,7 +23,6 @@ import 'package:hiddify/core/router/dialog/widgets/window_closing_dialog.dart';
 import 'package:hiddify/core/router/go_router/go_router_notifier.dart';
 import 'package:hiddify/features/app_update/model/remote_version_entity.dart';
 import 'package:hiddify/features/common/qr_code_dialog.dart';
-import 'package:hiddify/features/common/qr_code_scanner_screen.dart';
 import 'package:hiddify/features/settings/data/config_option_repository.dart';
 import 'package:hiddify/hiddifycore/generated/v2/hcore/hcore.pb.dart';
 import 'package:protobuf/protobuf.dart';
@@ -46,10 +45,6 @@ class DialogNotifier extends _$DialogNotifier {
       // ref.read(popupCountNotifierProvider.notifier).decrease();
       return value;
     });
-  }
-
-  Future<String?> showQrScanner() async {
-    return await _show<String?>(const QrCodeScannerDialog());
   }
 
   Future<void> showSortProfiles() async {

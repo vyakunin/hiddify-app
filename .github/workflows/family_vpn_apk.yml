@@ -71,16 +71,13 @@ jobs:
       - name: Prepare (flutter pub get + dart code-gen + download libbox AAR)
         run: make android-apk-prepare
 
-      - name: Build APK (split per ABI — produces arm, arm64, x64 separately)
+      - name: Build APK (arm64-only — modern phones; 32-bit ARM hits the Android deprecated-ABI dialog)
         env:
           BAKED_SUB_URL: ${{ inputs.sub_url }}
-          SENTRY_DSN: ""
         run: |
           flutter build apk --release \
-            --target-platform=android-arm,android-arm64,android-x64 \
-            --split-per-abi \
+            --target-platform=android-arm64 \
             --dart-define=baked_sub_url="$BAKED_SUB_URL" \
-            --dart-define=sentry_dsn="$SENTRY_DSN" \
             --dart-define=minimal_ui=true \
             --dart-define=app_display_name=Заметки \
             --dart-define=force_locale=ru
@@ -88,13 +85,16 @@ jobs:
           echo "=== built APKs ==="
           ls -la build/app/outputs/flutter-apk/
 
-      - name: Rename APKs to include user name
+      - name: Rename APK to include user name + arm64 tag
         run: |
           mkdir -p out
           USER="${{ inputs.user_name }}"
+          # Single arm64-only output. Include "arm64" in the filename so the
+          # downloader script (family_vpn/scripts/build_apk_for_user.sh) can
+          # still pattern-match it.
           for apk in build/app/outputs/flutter-apk/*.apk; do
             base=$(basename "$apk" .apk)
-            cp "$apk" "out/${base}-${USER}.apk"
+            cp "$apk" "out/${base}-arm64-${USER}.apk"
           done
           ls -la out/
 

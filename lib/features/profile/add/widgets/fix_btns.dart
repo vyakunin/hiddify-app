@@ -3,10 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:gap/gap.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/model/constants.dart';
-import 'package:hiddify/core/router/dialog/dialog_notifier.dart';
 import 'package:hiddify/features/profile/add/widgets/widgets.dart';
 import 'package:hiddify/features/profile/notifier/profile_notifier.dart';
-import 'package:hiddify/utils/utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 class FixBtns extends ConsumerWidget {
@@ -17,23 +15,10 @@ class FixBtns extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(translationsProvider).requireValue;
 
-    final isDesktop = PlatformUtils.isDesktop;
+    // QR scanner button removed in family_vpn fork — relatives import via
+    // the baked sub URL on first launch, not by scanning QR codes.
     return Row(
       children: [
-        if (!isDesktop) ...[
-          const Gap(AddProfileModalConst.fixBtnsGap),
-          FixBtn(
-            key: const ValueKey('add_by_qr_code_button'),
-            height: height,
-            title: t.common.scanQr,
-            icon: Icons.qr_code_scanner,
-            onTap: () async {
-              final cr = await ref.read(dialogNotifierProvider.notifier).showQrScanner();
-              if (cr == null) return;
-              ref.read(addProfileNotifierProvider.notifier).addClipboard(cr);
-            },
-          ),
-        ],
         const Gap(AddProfileModalConst.fixBtnsGap),
         FixBtn(
           key: const ValueKey('add_from_clipboard_button'),

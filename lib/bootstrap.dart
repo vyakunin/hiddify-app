@@ -27,7 +27,6 @@ import 'package:hiddify/hiddifycore/hiddify_core_service_provider.dart';
 import 'package:hiddify/riverpod_observer.dart';
 import 'package:hiddify/utils/utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:sentry_flutter/sentry_flutter.dart';
 
 Future<void> lazyBootstrap(WidgetsBinding widgetsBinding, Environment env) async {
   if (!kIsWeb) {
@@ -114,14 +113,13 @@ Future<void> lazyBootstrap(WidgetsBinding widgetsBinding, Environment env) async
     ProviderScope(
       parent: container,
       observers: [RiverpodObserver()],
-      child: SentryUserInteractionWidget(child: const App()),
+      child: const App(),
     ),
   );
 
   if (!kIsWeb) {
     FlutterNativeSplash.remove();
   }
-  // SentryFlutter.s(DateTime.now().toUtc());
 }
 
 Future<T> _init<T>(String name, Future<T> Function() initializer, {int? timeout}) async {

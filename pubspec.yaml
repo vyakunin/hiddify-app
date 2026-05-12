@@ -38,7 +38,8 @@ dependencies:
   dio: ^5.4.1
   ffi: ^2.1.2
   path_provider: ^2.1.1
-  mobile_scanner: ^7.2.0
+  # mobile_scanner removed in family_vpn fork — relatives use baked sub URL, not QR scanning.
+  # Dropping it removes libbarhopper_v3.so (~3 MB) + ML Kit barcode models (~0.8 MB).
   # protocol_handler: ^0.2.0
   flutter_native_splash: ^2.3.10
   share_plus: ^10.1.0
@@ -52,8 +53,6 @@ dependencies:
   url_launcher: ^6.2.5
   vclibs: ^0.1.2
   launch_at_startup: ^0.5.1
-  sentry_flutter: ^8.14.0
-  sentry_dart_plugin: ^2.4.1
   sqlite3_flutter_libs: ^0.5.28
 
   combine: ^0.5.7
@@ -165,8 +164,8 @@ flutter:
     - assets/images/tray_icon_connected.png
     - assets/images/tray_icon_disconnected.ico
     - assets/images/tray_icon_disconnected.png
-    - assets/images/connect_norouz.PNG
-    - assets/images/disconnect_norouz.PNG
+    # Removed in family_vpn fork: connect_norouz.PNG (~1.7 MB), disconnect_norouz.PNG (~170 KB).
+    # Holiday assets used by upstream Hiddify; never referenced from Dart in our fork.
     - assets/images/world_map.png
     - assets/images/source/ic_launcher_border.png
 
@@ -202,9 +201,3 @@ ffigen:
     entry-points:
       - "hiddify-core/bin/desktop.h"
 
-sentry:
-  upload_debug_symbols: true
-  upload_source_maps: true
-  upload_sources: true
-  log_level: info
-  ignore_missing: true
