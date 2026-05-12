@@ -55,6 +55,14 @@ else
 	CORE_URL=https://github.com/hiddify/hiddify-next-core/releases/download/draft
 endif
 
+# family_vpn slim build: override CORE_URL to use the stripped sing-box build
+# from vyakunin/hiddify-core. Drops with_quic / with_wireguard / with_awg /
+# with_naive_outbound and removes the upstream `-gcflags "all=-N -l"` debug
+# flag — arm64 .so goes from ~78 MB to ~52 MB. AAR is arm64-only.
+ifeq ($(CHANNEL),slim)
+	CORE_URL=https://github.com/vyakunin/hiddify-core/releases/download/v4.1.0-slim.1
+endif
+
 ifeq ($(CHANNEL),prod)
 	TARGET=lib/main_prod.dart
 else

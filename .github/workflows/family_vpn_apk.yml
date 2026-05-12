@@ -69,6 +69,10 @@ jobs:
           fi
 
       - name: Prepare (flutter pub get + dart code-gen + download libbox AAR)
+        env:
+          # Pull the slim AAR from vyakunin/hiddify-core instead of the
+          # upstream multi-ABI build. See Makefile CORE_URL slim branch.
+          CHANNEL: slim
         run: make android-apk-prepare
 
       - name: Build APK (arm64-only — modern phones; 32-bit ARM hits the Android deprecated-ABI dialog)
