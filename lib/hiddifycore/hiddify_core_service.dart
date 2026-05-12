@@ -158,25 +158,60 @@ class HiddifyCoreService with InfraLogger {
       // }
       // final content = await File(path).readAsString();
       // loggy.debug("starting with content: $content");
+      // family_vpn fork: retry start on transient errors.
+      // After a fresh profile import (e.g. first launch with the baked
+      // sub URL), the background daemon may not have finalized config
+      // parsing by the time the user taps connect. The first attempt
+      // surfaces as "failed to start core" in the UI; second tap a
+      // moment later works. A short retry loop hides this race.
+      //
+      // Three terminal cases short-circuit the retry:
+      //   - ALREADY_STARTED / EMPTY messageType: success.
+      //   - message contains "denied": VPN permission flow, no retry.
+      //   - non-unavailable GrpcError: rethrow to the outer handler.
       try {
-        final res = await core.bgClient.start(
-          StartRequest(
-            configPath: path,
-            configName: name,
-            // configContent: content,
-            disableMemoryLimit: disableMemoryLimit,
-          ),
-        );
+        CoreInfoResponse? res;
+        GrpcError? lastGrpcError;
+        for (var attempt = 0; attempt < 3; attempt++) {
+          if (attempt > 0) {
+            loggy.debug("retrying core start (attempt ${attempt + 1}/3) after 600ms");
+            await Future.delayed(const Duration(milliseconds: 600));
+          }
+          try {
+            res = await core.bgClient.start(
+              StartRequest(
+                configPath: path,
+                configName: name,
+                disableMemoryLimit: disableMemoryLimit,
+              ),
+            );
+            lastGrpcError = null;
+            if (res.messageType == MessageType.ALREADY_STARTED ||
+                res.messageType == MessageType.EMPTY ||
+                res.message.contains("denied")) {
+              break;
+            }
+            loggy.warning("core start attempt ${attempt + 1}/3 returned ${res.messageType}: ${res.message}");
+          } on GrpcError catch (e) {
+            lastGrpcError = e;
+            if (e.code != StatusCode.unavailable) rethrow;
+            loggy.warning("core start attempt ${attempt + 1}/3: gRPC unavailable");
+          }
+        }
         ref.read(coreRestartSignalProvider.notifier).restart();
-        if (res.messageType != MessageType.ALREADY_STARTED && res.messageType != MessageType.EMPTY) {
+        if (lastGrpcError != null) {
+          loggy.error("all core start attempts failed: $lastGrpcError");
+          return left(const ConnectionFailure.unexpected("background core is not started yet!"));
+        }
+        if (res != null &&
+            res.messageType != MessageType.ALREADY_STARTED &&
+            res.messageType != MessageType.EMPTY) {
           final alert = res.message.contains("denied") ? CoreAlert.requestVPNPermission : CoreAlert.startFailed;
           currentState = CoreStatus.stopped(
             alert: alert,
             message: "failed to start core ${res.messageType} ${res.message}",
           );
-
           statusController.add(currentState);
-
           return left(
             currentState.getCoreAlert() ??
                 ConnectionFailure.unexpected("failed to start core ${res.messageType} ${res.message}"),
@@ -185,13 +220,6 @@ class HiddifyCoreService with InfraLogger {
       } on GrpcError catch (e) {
         loggy.error("failed to start bg core: $e");
         ref.read(coreRestartSignalProvider.notifier).restart();
-        if (e.code == StatusCode.unavailable) {
-          return left(const ConnectionFailure.unexpected("background core is not started yet!"));
-        }
-        // throw InvalidConfig(e.message);
-        // throw DioException.connectionError(requestOptions: RequestOptions(), reason: e.codeName, error: e);
-
-        // throw DioException(requestOptions: RequestOptions(), error: e);
         return left(const ConnectionFailure.unexpected("failed to start background core"));
       }
 
