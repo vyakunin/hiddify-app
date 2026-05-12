@@ -71,7 +71,13 @@ android {
     }
 
     defaultConfig {
-        applicationId "app.hiddify.com"
+        // family_vpn fork: distinct applicationId so it installs alongside
+        // any existing Hiddify (from Play Store, F-Droid, original APK).
+        // Avoids "приложение не установлено" caused by package-name +
+        // signing-key collision when users have stock Hiddify installed.
+        // Kotlin namespace (com.hiddify.hiddify above) stays the same so
+        // native libbox bindings resolve.
+        applicationId "org.vyakunin.zametki"
         minSdkVersion flutter.minSdkVersion
         targetSdkVersion 36
         versionCode flutterVersionCode.toInteger()
