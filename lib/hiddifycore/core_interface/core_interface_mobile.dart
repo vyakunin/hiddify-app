@@ -115,40 +115,39 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
 
     _isBgClientAvailable = true;
     loggy.info("Waiting for starting core");
-    // family_vpn fork: extended wait loop + early-exit on port-open.
-    // Original 20 iterations × ~1.2s ≈ 24s wasn't enough for first-time users
-    // who have to tap through the Android VPN-permission system dialog before
-    // the background service can actually start. We've also removed the
-    // POST_NOTIFICATIONS dialog upstream (MainActivity.kt) but VPN-permission
-    // still requires a user tap that takes 3-15s in practice. 50 iters
-    // (~60s worst case) covers slow grants without making denial cases
-    // unbearable; the inner port-open check exits within ~200ms of the
-    // service actually coming up so happy-path latency is unchanged.
-    const int maxIterations = 50;
-    for (var i = 0; i < maxIterations; i++) {
+    // family_vpn fork: wall-clock deadline (not iteration count) + early-exit
+    // on port-open. Upstream's 20-iteration loop assumed _status.get() would
+    // block for ~1s per iteration; in practice it returns the cached last
+    // status instantly so iterations finish in ~200ms and the loop ran out
+    // in ~10s — way too short for first-time users tapping through the
+    // VPN-permission system dialog (typically 3-15s). 90s deadline buys
+    // plenty of time without making denial cases unbearable; the inner
+    // port-open check exits within ~300ms of the service actually starting
+    // so happy-path latency is unchanged.
+    final deadline = DateTime.now().add(const Duration(seconds: 90));
+    int iter = 0;
+    while (DateTime.now().isBefore(deadline)) {
+      iter++;
       // Fast path: if the bg gRPC port is open, the service is up — return.
       if (await isPortOpen("127.0.0.1", portBack)) {
-        loggy.info("bg port $portBack opened after $i iterations");
+        loggy.info("bg port $portBack opened after $iter iterations");
         return const CoreStarted();
       }
-      try {
-        final res = await _status.get(timeout: const Duration(seconds: 1));
-        switch (res) {
-          case CoreStarted():
-            return const CoreStarted();
-          case CoreStopped():
-            if (res.alert != null) {
-              return res;
-            }
-          case CoreStopping():
-          case CoreStarting():
-        }
-        await Future.delayed(const Duration(milliseconds: 200));
-      } on TimeoutException {
-        // No status arrived — loop and re-check port.
+      // Drain a status if available; bail early on terminal alerts.
+      final res = await _status.get(timeout: const Duration(milliseconds: 500));
+      switch (res) {
+        case CoreStarted():
+          return const CoreStarted();
+        case CoreStopped():
+          if (res.alert != null) {
+            return res;
+          }
+        case CoreStopping():
+        case CoreStarting():
       }
+      await Future.delayed(const Duration(seconds: 1));
     }
-    loggy.info("Waiting for starting core: gave up after $maxIterations iterations");
+    loggy.info("Waiting for starting core: deadline reached after $iter iterations");
     await stopMethodChannel();
     return const CoreStatus.stopped(alert: CoreAlert.startService, message: "starting background core...");
   }
