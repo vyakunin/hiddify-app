@@ -60,7 +60,7 @@ endif
 # with_naive_outbound and removes the upstream `-gcflags "all=-N -l"` debug
 # flag — arm64 .so goes from ~78 MB to ~52 MB. AAR is arm64-only.
 ifeq ($(CHANNEL),slim)
-	CORE_URL=https://github.com/vyakunin/hiddify-core/releases/download/v4.1.0-slim.1
+	CORE_URL=https://github.com/vyakunin/hiddify-core/releases/download/v4.1.0-slim.2
 endif
 
 ifeq ($(CHANNEL),prod)
