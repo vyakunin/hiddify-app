@@ -23,33 +23,36 @@ class LogsPage extends HookConsumerWidget with PresLogger {
     final state = ref.watch(logsOverviewNotifierProvider);
     final notifier = ref.watch(logsOverviewNotifierProvider.notifier);
 
-    final debug = ref.watch(debugModeNotifierProvider);
     final pathResolver = ref.watch(logPathResolverProvider);
+    ref.watch(debugModeNotifierProvider); // kept for parity; gate removed below
 
     final filterController = useTextEditingController(text: state.filter);
 
-    final List<PopupMenuEntry> popupButtons = debug || PlatformUtils.isDesktop
-        ? [
-            PopupMenuItem(
-              child: Text(t.pages.logs.shareCoreLogs),
-              onTap: () async {
-                await UriUtils.tryShareOrLaunchFile(
-                  Uri.parse(pathResolver.coreFile().path),
-                  fileOrDir: pathResolver.directory.uri,
-                );
-              },
-            ),
-            PopupMenuItem(
-              child: Text(t.pages.logs.shareAppLogs),
-              onTap: () async {
-                await UriUtils.tryShareOrLaunchFile(
-                  Uri.parse(pathResolver.appFile().path),
-                  fileOrDir: pathResolver.directory.uri,
-                );
-              },
-            ),
-          ]
-        : [];
+    // family_vpn fork: always expose log-sharing on every platform/build.
+    // Relatives stuck at "Подключение..." can't enable Debug mode through
+    // the settings tree, but a one-tap "Share Logs" → WhatsApp is the
+    // single best diagnostic primitive when remote support is the only
+    // channel back to the operator.
+    final List<PopupMenuEntry> popupButtons = [
+      PopupMenuItem(
+        child: Text(t.pages.logs.shareCoreLogs),
+        onTap: () async {
+          await UriUtils.tryShareOrLaunchFile(
+            Uri.parse(pathResolver.coreFile().path),
+            fileOrDir: pathResolver.directory.uri,
+          );
+        },
+      ),
+      PopupMenuItem(
+        child: Text(t.pages.logs.shareAppLogs),
+        onTap: () async {
+          await UriUtils.tryShareOrLaunchFile(
+            Uri.parse(pathResolver.appFile().path),
+            fileOrDir: pathResolver.directory.uri,
+          );
+        },
+      ),
+    ];
 
     return Scaffold(
       appBar: AppBar(
