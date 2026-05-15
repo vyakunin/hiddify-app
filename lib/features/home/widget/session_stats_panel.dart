@@ -8,8 +8,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hiddify/features/connection/model/connection_status.dart';
 import 'package:hiddify/features/connection/notifier/connection_notifier.dart';
+import 'package:hiddify/features/log/data/log_data_providers.dart';
 import 'package:hiddify/features/proxy/active/active_proxy_notifier.dart';
 import 'package:hiddify/features/stats/notifier/stats_notifier.dart';
+import 'package:hiddify/utils/utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 class SessionStatsPanel extends HookConsumerWidget {
@@ -107,10 +109,65 @@ class SessionStatsPanel extends HookConsumerWidget {
       );
     }
 
+    final pathResolver = ref.watch(logPathResolverProvider);
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-      child: Center(child: body),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            body,
+            const SizedBox(height: 12),
+            // family_vpn fork: persistent log-share entrypoint. The minimal UI
+            // strips the AppBar that normally hosts navigation to the Logs
+            // page, so a stuck relative has no other way to get diagnostic
+            // logs out. Two TextButtons — one for core, one for app — share
+            // via Android's system share sheet (WhatsApp, Telegram, …).
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 8,
+              children: [
+                TextButton.icon(
+                  onPressed: () async {
+                    await UriUtils.tryShareOrLaunchFile(
+                      Uri.parse(pathResolver.coreFile().path),
+                      fileOrDir: pathResolver.directory.uri,
+                    );
+                  },
+                  icon: const Text("📋", style: TextStyle(fontSize: 16)),
+                  label: const Text("Логи core"),
+                  style: TextButton.styleFrom(
+                    foregroundColor: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                    textStyle: theme.textTheme.bodySmall,
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: () async {
+                    await UriUtils.tryShareOrLaunchFile(
+                      Uri.parse(pathResolver.appFile().path),
+                      fileOrDir: pathResolver.directory.uri,
+                    );
+                  },
+                  icon: const Text("📝", style: TextStyle(fontSize: 16)),
+                  label: const Text("Логи приложения"),
+                  style: TextButton.styleFrom(
+                    foregroundColor: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                    textStyle: theme.textTheme.bodySmall,
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 
