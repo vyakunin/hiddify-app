@@ -86,6 +86,36 @@ Future<void> lazyBootstrap(WidgetsBinding widgetsBinding, Environment env) async
   await _init("translations", () => container.read(translationsProvider.future));
 
   await _safeInit("active profile", () => container.read(activeProfileProvider.future), timeout: 1000);
+
+  // family_vpn fork: refresh the baked subscription before sing-box init.
+  // Daily port-rotation + cover-host rotation invalidates the cached
+  // profile; without this the app would silently show "Подключено" with
+  // 0 B/s. Skip on first launch (no profile yet) — that path runs the
+  // AddProfile flow from RoutingConfigNotifier.
+  if (Environment.hasBakedSubscription) {
+    await _safeInit("baked sub refresh", () async {
+      final hasProfile = await container.read(hasAnyProfileProvider.future);
+      if (!hasProfile) {
+        Logger.bootstrap.debug("no profile yet — first launch, skipping refresh");
+        return;
+      }
+      final repo = await container.read(profileRepositoryProvider.future);
+      await repo
+          .upsertRemote(Environment.bakedSubscriptionUrl)
+          .match(
+            (f) {
+              Logger.bootstrap.warning("baked sub refresh failed (using cached): $f");
+              return null;
+            },
+            (_) {
+              Logger.bootstrap.info("baked sub refresh ok");
+              return null;
+            },
+          )
+          .run();
+    }, timeout: 2500);
+  }
+
   await _init("hiddify-core", () => container.read(hiddifyCoreServiceProvider).init());
 
   if (!kIsWeb) {
