@@ -84,7 +84,8 @@ jobs:
             --dart-define=baked_sub_url="$BAKED_SUB_URL" \
             --dart-define=minimal_ui=true \
             --dart-define=app_display_name=Заметки \
-            --dart-define=force_locale=ru
+            --dart-define=force_locale=ru \
+            --dart-define=enable_fork_update=true
           echo
           echo "=== built APKs ==="
           ls -la build/app/outputs/flutter-apk/

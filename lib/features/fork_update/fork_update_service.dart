@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/services.dart';
 import 'package:hiddify/core/logger/logger.dart';
 import 'package:hiddify/core/model/environment.dart';
 import 'package:path_provider/path_provider.dart';
@@ -159,4 +160,57 @@ class ForkUpdateService {
 
   /// Drop the staged APK + the prefs. Use after a successful install.
   Future<void> clearStaged() => _clearStaged();
+
+  // ---- install ----
+
+  static const _installChannel = MethodChannel("com.hiddify.app/fork_update");
+  static const _installAttemptsKey = "fork_update.install_attempts";
+
+  /// Number of times the user has tapped "Update & connect" without
+  /// the install completing. After [maxHardNudgeAttempts] consecutive
+  /// failures, the UI is expected to fall back from hard nudge (replace
+  /// Connect) to soft nudge (banner + plain Connect) so a bad APK can't
+  /// brick the connect button forever.
+  int get installAttempts => _prefs.getInt(_installAttemptsKey) ?? 0;
+
+  static const int maxHardNudgeAttempts = 3;
+  bool get shouldHardNudge =>
+      stagedApkPath != null && installAttempts < maxHardNudgeAttempts;
+
+  /// Fire the system install dialog for the staged APK.
+  ///
+  /// Returns true if the installer activity launched (NOT if the install
+  /// succeeded — that we only learn about indirectly, when the staged APK
+  /// is still here next boot AND the running build is unchanged, the user
+  /// either dismissed the dialog or revoked the permission).
+  ///
+  /// On install success, the new APK boots, calls [clearStaged] from a
+  /// post-install code path (or it naturally clears on next checkAndStage
+  /// since version_code now matches the staged one).
+  Future<bool> installStagedApk() async {
+    final path = stagedApkPath;
+    if (path == null) return false;
+    if (!Platform.isAndroid) return false;
+    await _bumpAttempts();
+    try {
+      final ok = await _installChannel.invokeMethod<bool>(
+        "install",
+        {"path": path},
+      );
+      return ok == true;
+    } on PlatformException catch (e) {
+      Logger.bootstrap.warning("fork_update: install channel error: ${e.code} ${e.message}");
+      return false;
+    }
+  }
+
+  Future<void> _bumpAttempts() async {
+    await _prefs.setInt(_installAttemptsKey, installAttempts + 1);
+  }
+
+  /// Reset the attempts counter after we observe a successful install
+  /// (current running buildNumber matches the staged version_code).
+  Future<void> resetInstallAttempts() async {
+    await _prefs.remove(_installAttemptsKey);
+  }
 }

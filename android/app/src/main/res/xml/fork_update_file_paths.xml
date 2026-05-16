@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- ForkUpdateHandler vends content:// URIs from this app's cache dir
+         (where ForkUpdateService stages the downloaded APK).
+         Path "/" means: every file directly under getApplicationCacheDirectory()
+         is shareable. We're only vending family_vpn_update.apk; no risk of
+         leaking arbitrary cache contents because no other code in this app
+         calls FileProvider.getUriForFile against this authority.
+         The <files-path> entry is unused today but documented here so a
+         future move from cache to app-private files dir is a one-line
+         change. -->
+    <cache-path name="fork_update_cache" path="/" />
+    <files-path name="fork_update_files" path="fork_update/" />
+</paths>

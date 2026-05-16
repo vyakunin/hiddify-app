@@ -49,6 +49,10 @@ class MainActivity : FlutterFragmentActivity(), ServiceConnection.Callback {
         flutterEngine.plugins.add(PlatformSettingsHandler())
         flutterEngine.plugins.add(EventHandler())
         flutterEngine.plugins.add(LogHandler())
+        // family_vpn fork: in-app APK install channel; takes a path to the
+        // APK that ForkUpdateService staged in app cache and fires the
+        // system installer activity.
+        flutterEngine.plugins.add(ForkUpdateHandler())
 //        flutterEngine.plugins.add(GroupsChannel(lifecycleScope))
 //        flutterEngine.plugins.add(ActiveGroupsChannel(lifecycleScope))
 //        flutterEngine.plugins.add(StatsChannel(lifecycleScope))

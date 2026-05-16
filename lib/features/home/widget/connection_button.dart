@@ -11,6 +11,7 @@ import 'package:hiddify/core/theme/theme_extensions.dart';
 import 'package:hiddify/core/widget/animated_text.dart';
 import 'package:hiddify/features/connection/model/connection_status.dart';
 import 'package:hiddify/features/connection/notifier/connection_notifier.dart';
+import 'package:hiddify/features/fork_update/fork_update_provider.dart';
 import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
 import 'package:hiddify/features/proxy/active/active_proxy_notifier.dart';
 import 'package:hiddify/features/settings/data/config_option_repository.dart';
@@ -114,6 +115,32 @@ class ConnectionButton extends HookConsumerWidget {
     if (delay <= 0 || delay > 65000 || connectionStatus.value != const Connected()) {
       secureLabel = "";
     }
+
+    // family_vpn fork: when an updated APK is staged in app cache, replace
+    // the regular Connect onTap with one that fires the system install
+    // dialog. After N consecutive dismissals (forkUpdateShouldHardNudge
+    // flips to false), the button falls back to normal Connect so a bad
+    // APK can't brick the connect path.
+    final shouldHardNudge =
+        connectionStatus.value == const Disconnected() &&
+        ref.watch(forkUpdateShouldHardNudgeProvider);
+    if (shouldHardNudge) {
+      return _ConnectionButton(
+        onTap: () async {
+          await ref.read(forkUpdateServiceProvider).installStagedApk();
+        },
+        enabled: true,
+        // Localized label would be better long-term, but t.connection.* has no
+        // "update" entry yet — Russian-text hardcode matches the rest of the
+        // forced-RU UI in this slim build and avoids a translations refactor.
+        label: "Обновить и подключиться",
+        buttonColor: const Color.fromARGB(255, 33, 150, 243), // material blue
+        newButtonColor: const Color.fromARGB(255, 33, 150, 243),
+        animated: true,
+        secureLabel: "",
+      );
+    }
+
     return _ConnectionButton(
       onTap: switch (connectionStatus) {
         AsyncData(value: Connected()) when requiresReconnect == true => () async {

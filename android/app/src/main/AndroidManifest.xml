@@ -19,6 +19,12 @@
     <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.CAMERA" />
+    <!-- family_vpn fork: in-app APK update installer (ForkUpdateHandler).
+         The installer activity launched via ACTION_VIEW needs this to
+         proceed past the first-time "install unknown apps" gate on
+         API 26+. Without it the user gets bounced to settings every
+         time. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <uses-permission
         android:name="android.permission.QUERY_ALL_PACKAGES"
@@ -141,6 +147,21 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="proxy" />
         </service>
+        <!-- family_vpn fork: FileProvider that exposes APK staged by
+             ForkUpdateService for the system installer. Authority must
+             match what ForkUpdateHandler.kt builds at runtime:
+             "<applicationId>.fileprovider". Shared paths declared in
+             res/xml/fork_update_file_paths.xml. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/fork_update_file_paths" />
+        </provider>
+
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data
