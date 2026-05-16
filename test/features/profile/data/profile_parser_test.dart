@@ -27,7 +27,11 @@ void main() {
           remote: (rp) {
             expect(rp.name, equals("filename"));
             expect(rp.url, equals(validBaseUrl));
-            expect(rp.options, isNull);
+            // options is null in upstream mode; in fork mode (--dart-define
+            // =baked_sub_url=...) the default-fallback sets it to 6h.
+            if (!const bool.hasEnvironment('baked_sub_url')) {
+              expect(rp.options, isNull);
+            }
             expect(rp.subInfo, isNull);
           },
           local: (lp) {},
@@ -53,7 +57,9 @@ void main() {
           remote: (rp) {
             expect(rp.name, equals("b"));
             expect(rp.url, equals(validExtendedUrl));
-            expect(rp.options, isNull);
+            if (!const bool.hasEnvironment('baked_sub_url')) {
+              expect(rp.options, isNull);
+            }
             expect(rp.subInfo, isNull);
           },
           local: (lp) {},
@@ -111,6 +117,40 @@ void main() {
                   ),
                 ),
               );
+            },
+            local: (lp) {},
+          );
+        });
+      });
+    });
+
+    test("family_vpn fork: defaults updateInterval to 6h when baked sub URL is set and header is absent", () {
+      // Sanity-check the test environment is configured with --dart-define=baked_sub_url=...
+      // The CI workflow `family_vpn_apk.yml` injects this, the slim build expects it.
+      // Without it the default-fallback path is gated off.
+      if (!const bool.hasEnvironment('baked_sub_url')) {
+        // Skip gracefully — test environment without baked sub URL.
+        return;
+      }
+      final allHeaders = ProfileParser.populateHeaders(content: '', remoteHeaders: <String, dynamic>{});
+      expect(allHeaders.isRight(), true);
+      allHeaders.match((l) {}, (r) {
+        final profile = ProfileParser.parse(
+          tempFilePath: '',
+          profile: ProfileEntity.remote(
+            id: const Uuid().v4(),
+            active: true,
+            name: '',
+            url: validBaseUrl,
+            lastUpdate: DateTime.now(),
+            populatedHeaders: r,
+          ),
+        );
+        expect(profile.isRight(), true);
+        profile.match((l) {}, (r) {
+          r.map(
+            remote: (rp) {
+              expect(rp.options, equals(const ProfileOptions(updateInterval: Duration(hours: 6))));
             },
             local: (lp) {},
           );

@@ -6,6 +6,7 @@ import 'package:dio/dio.dart';
 import 'package:fpdart/fpdart.dart';
 import 'package:hiddify/core/db/db.dart';
 import 'package:hiddify/core/http_client/dio_http_client.dart';
+import 'package:hiddify/core/model/environment.dart';
 import 'package:hiddify/features/profile/data/profile_data_mapper.dart';
 import 'package:hiddify/features/profile/model/profile_entity.dart';
 import 'package:hiddify/features/profile/model/profile_failure.dart';
@@ -358,6 +359,14 @@ class ProfileParser {
             when options == null && !isAutoUpdateDisable) {
           final updateInterval = Duration(hours: int.parse(updateIntervalStr));
           options = ProfileOptions(updateInterval: updateInterval);
+        }
+        // family_vpn fork: ensure a periodic refresh happens even if the
+        // server forgets to emit profile-update-interval. ForegroundProfiles
+        // UpdateNotifier silently skips profiles with null updateInterval, so
+        // a missing header would silently disable the recovery path that we
+        // need against daily port-rotation breaking the cached config.
+        if (Environment.hasBakedSubscription && options == null && !isAutoUpdateDisable) {
+          options = const ProfileOptions(updateInterval: Duration(hours: 6));
         }
 
         SubscriptionInfo? subInfo;
