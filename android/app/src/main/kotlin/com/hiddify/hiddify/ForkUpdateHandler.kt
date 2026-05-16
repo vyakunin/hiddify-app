@@ -1,13 +1,19 @@
 package com.hiddify.hiddify
 
+import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageInfo
+import android.content.pm.PackageManager
+import android.content.pm.Signature
 import android.net.Uri
+import android.os.Build
 import android.util.Log
 import androidx.core.content.FileProvider
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
+import java.security.MessageDigest
 
 /**
  * Platform channel for the family_vpn fork's in-app APK update.
@@ -73,6 +79,28 @@ class ForkUpdateHandler : FlutterPlugin, MethodChannel.MethodCallHandler {
             return
         }
 
+        // Defense in depth: refuse to launch the system installer for an APK
+        // signed by a different key than the running app. The platform
+        // installer would reject it anyway with "App not installed", but
+        // catching it here gives a precise error to surface back through Dart
+        // and prevents the user from seeing the cryptic system dialog.
+        val installedSha = installedSignerSha256(ctx)
+        val stagedSha = apkSignerSha256(ctx, path)
+        if (installedSha == null || stagedSha == null) {
+            Log.e(TAG, "signer check: could not read certs (installed=$installedSha staged=$stagedSha)")
+            result.error("SIGNER_UNKNOWN", "could not read signing certificates", null)
+            return
+        }
+        if (installedSha != stagedSha) {
+            Log.e(TAG, "signer mismatch: installed=$installedSha staged=$stagedSha path=$path")
+            result.error(
+                "SIGNER_MISMATCH",
+                "staged APK signer ($stagedSha) ≠ installed signer ($installedSha)",
+                null
+            )
+            return
+        }
+
         val authority = "${ctx.packageName}.fileprovider"
         val uri: Uri = try {
             FileProvider.getUriForFile(ctx, authority, file)
@@ -99,5 +127,56 @@ class ForkUpdateHandler : FlutterPlugin, MethodChannel.MethodCallHandler {
             return
         }
         result.success(true)
+    }
+
+    private fun installedSignerSha256(ctx: Context): String? {
+        val pm = ctx.packageManager
+        val info = try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                pm.getPackageInfo(ctx.packageName, PackageManager.GET_SIGNING_CERTIFICATES)
+            } else {
+                @Suppress("DEPRECATION")
+                pm.getPackageInfo(ctx.packageName, PackageManager.GET_SIGNATURES)
+            }
+        } catch (e: PackageManager.NameNotFoundException) {
+            Log.e(TAG, "getPackageInfo for self failed", e)
+            return null
+        }
+        return firstSignerSha256(info)
+    }
+
+    private fun apkSignerSha256(ctx: Context, apkPath: String): String? {
+        val pm = ctx.packageManager
+        val info = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            pm.getPackageArchiveInfo(apkPath, PackageManager.GET_SIGNING_CERTIFICATES)
+        } else {
+            @Suppress("DEPRECATION")
+            pm.getPackageArchiveInfo(apkPath, PackageManager.GET_SIGNATURES)
+        }
+        if (info == null) {
+            Log.e(TAG, "getPackageArchiveInfo returned null for $apkPath (malformed APK?)")
+            return null
+        }
+        return firstSignerSha256(info)
+    }
+
+    private fun firstSignerSha256(info: PackageInfo): String? {
+        val signature: Signature? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            val si = info.signingInfo ?: return null
+            // Prefer the current signer set; fall back to the cert history
+            // (covers rotated keys — system installer treats both as valid).
+            val sigs: Array<Signature>? = if (si.hasMultipleSigners()) {
+                si.apkContentsSigners
+            } else {
+                si.signingCertificateHistory
+            }
+            sigs?.firstOrNull()
+        } else {
+            @Suppress("DEPRECATION")
+            info.signatures?.firstOrNull()
+        }
+        if (signature == null) return null
+        val digest = MessageDigest.getInstance("SHA-256").digest(signature.toByteArray())
+        return digest.joinToString("") { "%02x".format(it) }
     }
 }
