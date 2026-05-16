@@ -19,6 +19,7 @@ import 'package:hiddify/features/app/widget/app.dart';
 import 'package:hiddify/features/auto_start/notifier/auto_start_notifier.dart';
 
 import 'package:hiddify/features/log/data/log_data_providers.dart';
+import 'package:hiddify/features/fork_update/fork_update_service.dart';
 import 'package:hiddify/features/profile/data/profile_data_providers.dart';
 import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
 import 'package:hiddify/features/system_tray/notifier/system_tray_notifier.dart';
@@ -114,6 +115,23 @@ Future<void> lazyBootstrap(WidgetsBinding widgetsBinding, Environment env) async
           )
           .run();
     }, timeout: 2500);
+  }
+
+  // family_vpn fork: in-app APK update channel. Polls /app/version.json,
+  // downloads a newer APK to app-private cache, persists the path in
+  // SharedPreferences. UI hard-nudges via the Connect button when a
+  // staged APK exists. Gated by --dart-define=enable_fork_update=true;
+  // safe to leave on always once the install-intent plumbing is verified
+  // on a real phone.
+  if (Environment.enableForkUpdate && Environment.hasBakedSubscription) {
+    await _safeInit("fork update check", () async {
+      final prefs = container.read(sharedPreferencesProvider).requireValue;
+      final service = ForkUpdateService(prefs);
+      // PackageInfo.buildNumber surfaces as a string ("123" for versionCode=123).
+      final currentCode = int.tryParse(appInfo.buildNumber) ?? 0;
+      final status = await service.checkAndStage(currentCode);
+      Logger.bootstrap.info("fork update: $status");
+    }, timeout: 12000);
   }
 
   await _init("hiddify-core", () => container.read(hiddifyCoreServiceProvider).init());

@@ -31,6 +31,39 @@ enum Environment {
   // device whose system locale is something else.
   static const forceLocale = String.fromEnvironment("force_locale", defaultValue: "ru");
   static bool get hasForcedLocale => forceLocale.isNotEmpty;
+
+  // family_vpn fork: in-app APK update channel served from the same host
+  // as the baked subscription. When enabled, the app polls
+  //   <sub-host>/app/version.json
+  // on each launch (after baked-sub refresh) and downloads
+  //   <sub-host>/app/<token>/family_vpn.apk
+  // through the VPN tunnel when a newer versionCode is available. The
+  // download is staged in app-private cache and surfaced to the UI on
+  // the next Connect tap as "Update & connect" (hard nudge — see
+  // PROJECT NEXT.md, "APK push design").
+  //
+  // Off by default so the slim baseline APK keeps shipping to relatives
+  // without behavior change while the install-intent plumbing matures.
+  // Enable in a future build via --dart-define=enable_fork_update=true.
+  static const enableForkUpdate = bool.fromEnvironment("enable_fork_update");
+
+  // Derived from bakedSubscriptionUrl. /sub/<token> → /app/version.json
+  // and /app/<token>/family_vpn.apk live at the same host. Returns empty
+  // strings when there's no baked sub (then the update channel is moot).
+  static String get forkUpdateVersionJsonUrl {
+    if (bakedSubscriptionUrl.isEmpty) return "";
+    final i = bakedSubscriptionUrl.indexOf("/sub/");
+    if (i < 0) return "";
+    return "${bakedSubscriptionUrl.substring(0, i)}/app/version.json";
+  }
+
+  static String get forkUpdateApkUrl {
+    if (bakedSubscriptionUrl.isEmpty) return "";
+    final i = bakedSubscriptionUrl.indexOf("/sub/");
+    if (i < 0) return "";
+    final token = bakedSubscriptionUrl.substring(i + 5); // after "/sub/"
+    return "${bakedSubscriptionUrl.substring(0, i)}/app/$token/family_vpn.apk";
+  }
 }
 
 enum Release {
