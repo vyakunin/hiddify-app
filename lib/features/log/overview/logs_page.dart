@@ -7,6 +7,7 @@ import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/model/failures.dart';
 import 'package:hiddify/core/preferences/general_preferences.dart';
 import 'package:hiddify/core/widget/adaptive_icon.dart';
+import 'package:hiddify/features/log/data/log_bundle.dart';
 import 'package:hiddify/features/log/data/log_data_providers.dart';
 import 'package:hiddify/features/log/model/log_level.dart';
 import 'package:hiddify/features/log/overview/logs_overview_notifier.dart';
@@ -32,23 +33,16 @@ class LogsPage extends HookConsumerWidget with PresLogger {
     // Relatives stuck at "Подключение..." can't enable Debug mode through
     // the settings tree, but a one-tap "Share Logs" → WhatsApp is the
     // single best diagnostic primitive when remote support is the only
-    // channel back to the operator.
+    // channel back to the operator. One combined file (app + core) so the
+    // operator gets the full picture from a single share.
     final List<PopupMenuEntry> popupButtons = [
       PopupMenuItem(
-        child: Text(t.pages.logs.shareCoreLogs),
+        child: const Text("Поделиться логами"),
         onTap: () async {
+          final file = await LogBundle(pathResolver).buildCombinedFile();
           await UriUtils.tryShareOrLaunchFile(
-            Uri.parse(pathResolver.coreFile().path),
-            fileOrDir: pathResolver.directory.uri,
-          );
-        },
-      ),
-      PopupMenuItem(
-        child: Text(t.pages.logs.shareAppLogs),
-        onTap: () async {
-          await UriUtils.tryShareOrLaunchFile(
-            Uri.parse(pathResolver.appFile().path),
-            fileOrDir: pathResolver.directory.uri,
+            Uri.parse(file.path),
+            fileOrDir: file.parent.uri,
           );
         },
       ),

@@ -17,6 +17,7 @@ import 'package:hiddify/core/preferences/preferences_migration.dart';
 import 'package:hiddify/core/preferences/preferences_provider.dart';
 import 'package:hiddify/features/app/widget/app.dart';
 import 'package:hiddify/features/auto_start/notifier/auto_start_notifier.dart';
+import 'package:hiddify/features/connection/notifier/connection_diagnostics.dart';
 
 import 'package:hiddify/features/log/data/log_data_providers.dart';
 import 'package:hiddify/features/fork_update/fork_update_service.dart';
@@ -135,6 +136,12 @@ Future<void> lazyBootstrap(WidgetsBinding widgetsBinding, Environment env) async
   }
 
   await _init("hiddify-core", () => container.read(hiddifyCoreServiceProvider).init());
+
+  // family_vpn fork: start the diagnostic logger. Pure side-effect provider —
+  // attaches a 30s heartbeat + connection-state listener that writes shape
+  // and (when stuck) STUCK_CONNECTED markers into app.log. Cheap; runs for
+  // the lifetime of the app.
+  container.read(connectionDiagnosticsProvider);
 
   if (!kIsWeb) {
     // await _safeInit(
