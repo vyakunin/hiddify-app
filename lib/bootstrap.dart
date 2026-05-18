@@ -89,11 +89,31 @@ Future<void> lazyBootstrap(WidgetsBinding widgetsBinding, Environment env) async
 
   await _safeInit("active profile", () => container.read(activeProfileProvider.future), timeout: 1000);
 
-  // family_vpn fork: refresh the baked subscription before sing-box init.
+  // family_vpn fork: in-app APK update channel. Polls /app/version.json,
+  // downloads a newer APK to app-private cache, persists the path in
+  // SharedPreferences. UI hard-nudges via the Connect button when a
+  // staged APK exists. Gated by --dart-define=enable_fork_update=true;
+  // safe to leave on always once the install-intent plumbing is verified
+  // on a real phone.
+  if (Environment.enableForkUpdate && Environment.hasBakedSubscription) {
+    await _safeInit("fork update check", () async {
+      final prefs = container.read(sharedPreferencesProvider).requireValue;
+      final service = ForkUpdateService(prefs);
+      // PackageInfo.buildNumber surfaces as a string ("123" for versionCode=123).
+      final currentCode = int.tryParse(appInfo.buildNumber) ?? 0;
+      final status = await service.checkAndStage(currentCode);
+      Logger.bootstrap.info("fork update: $status");
+    }, timeout: 12000);
+  }
+
+  await _init("hiddify-core", () => container.read(hiddifyCoreServiceProvider).init());
+
+  // family_vpn fork: refresh the baked subscription after hiddify-core init.
   // Daily port-rotation + cover-host rotation invalidates the cached
   // profile; without this the app would silently show "Подключено" with
-  // 0 B/s. Skip on first launch (no profile yet) — that path runs the
-  // AddProfile flow from RoutingConfigNotifier.
+  // 0 B/s. Must run AFTER hiddify-core init — upsertRemote triggers
+  // HiddifyCoreService.changeOptions which needs fgClient initialized.
+  // Skip on first launch (no profile yet) — AddProfile flow handles that.
   if (Environment.hasBakedSubscription) {
     await _safeInit("baked sub refresh", () async {
       final hasProfile = await container.read(hasAnyProfileProvider.future);
@@ -117,25 +137,6 @@ Future<void> lazyBootstrap(WidgetsBinding widgetsBinding, Environment env) async
           .run();
     }, timeout: 2500);
   }
-
-  // family_vpn fork: in-app APK update channel. Polls /app/version.json,
-  // downloads a newer APK to app-private cache, persists the path in
-  // SharedPreferences. UI hard-nudges via the Connect button when a
-  // staged APK exists. Gated by --dart-define=enable_fork_update=true;
-  // safe to leave on always once the install-intent plumbing is verified
-  // on a real phone.
-  if (Environment.enableForkUpdate && Environment.hasBakedSubscription) {
-    await _safeInit("fork update check", () async {
-      final prefs = container.read(sharedPreferencesProvider).requireValue;
-      final service = ForkUpdateService(prefs);
-      // PackageInfo.buildNumber surfaces as a string ("123" for versionCode=123).
-      final currentCode = int.tryParse(appInfo.buildNumber) ?? 0;
-      final status = await service.checkAndStage(currentCode);
-      Logger.bootstrap.info("fork update: $status");
-    }, timeout: 12000);
-  }
-
-  await _init("hiddify-core", () => container.read(hiddifyCoreServiceProvider).init());
 
   // family_vpn fork: start the diagnostic logger. Pure side-effect provider —
   // attaches a 30s heartbeat + connection-state listener that writes shape
