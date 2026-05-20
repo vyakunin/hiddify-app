@@ -10,6 +10,7 @@ import 'package:hiddify/core/router/go_router/refresh_listenable.dart';
 import 'package:hiddify/features/about/widget/about_page.dart';
 import 'package:hiddify/features/home/widget/home_page.dart';
 import 'package:hiddify/features/intro/widget/intro_page.dart';
+import 'package:hiddify/features/play_oauth/oauth_signin_page.dart';
 import 'package:hiddify/features/log/overview/logs_page.dart';
 import 'package:hiddify/features/per_app_proxy/overview/per_app_proxy_page.dart';
 import 'package:hiddify/features/profile/details/profile_details_page.dart';
@@ -91,7 +92,23 @@ class RoutingConfigNotifier extends _$RoutingConfigNotifier {
           }
         }
 
-        if (!introCompleted && !bakedFlow) {
+        // family_vpn fork (Play distribution branch): no baked sub URL.
+        // On first launch with no profile, route to /oauth-signin instead
+        // of the upstream intro/onboarding. Once a profile exists this
+        // branch is inert and routing falls through to /home.
+        final oauthFlow = Environment.hasPlayOauth;
+        if (oauthFlow && url == null) {
+          final hasProfile = ref.read(hasAnyProfileProvider).valueOrNull ?? false;
+          final isOauth = state.matchedLocation == '/oauth-signin';
+          if (!hasProfile && !isOauth) {
+            return '/oauth-signin';
+          }
+          if (hasProfile && isOauth) {
+            return '/home';
+          }
+        }
+
+        if (!introCompleted && !bakedFlow && !oauthFlow) {
           return url != null ? '/intro?url=$url' : '/intro';
         } else if (isIntro) {
           if (url != null)
@@ -262,6 +279,11 @@ class RoutingConfigNotifier extends _$RoutingConfigNotifier {
           ],
         ),
         GoRoute(name: 'intro', path: '/intro', builder: (_, _) => const IntroPage()),
+        GoRoute(
+          name: 'oauth-signin',
+          path: '/oauth-signin',
+          builder: (_, _) => const OauthSigninPage(),
+        ),
       ],
     );
   }

@@ -95,7 +95,10 @@ Future<void> lazyBootstrap(WidgetsBinding widgetsBinding, Environment env) async
   // staged APK exists. Gated by --dart-define=enable_fork_update=true;
   // safe to leave on always once the install-intent plumbing is verified
   // on a real phone.
-  if (Environment.enableForkUpdate && Environment.hasBakedSubscription) {
+  // family_vpn fork: in-app updater is for the direct distribution path
+  // only. Play handles its own updates, so it MUST stay off in the Play
+  // branch even if a build accidentally sets enable_fork_update=true.
+  if (Environment.enableForkUpdate && Environment.hasBakedSubscription && !Environment.hasPlayOauth) {
     await _safeInit("fork update check", () async {
       final prefs = container.read(sharedPreferencesProvider).requireValue;
       final service = ForkUpdateService(prefs);

@@ -47,6 +47,28 @@ enum Environment {
   // Enable in a future build via --dart-define=enable_fork_update=true.
   static const enableForkUpdate = bool.fromEnvironment("enable_fork_update");
 
+  // family_vpn fork (Play distribution branch): when true, the app does NOT
+  // ship with a baked sub URL. On first launch the user signs in with
+  // Google; we POST the resulting ID token to <oauth_exchange_url> and the
+  // server returns the sub URL for the matching gmail. The fork-update
+  // channel is force-disabled in this mode because Play handles updates.
+  static const enableOauth = bool.fromEnvironment("enable_oauth");
+
+  // Google OAuth client ID (Android type) used by GoogleSignIn. Injected
+  // at build time so the fork-slim baseline can ship without it.
+  static const playOauthClientId = String.fromEnvironment("play_oauth_client_id");
+
+  // Endpoint that exchanges a Google ID token for a per-user sub URL.
+  // Defaults to assets.vyakunin.org since the OAuth flow only runs in the
+  // Play branch and that's where the endpoint is wired.
+  static const oauthExchangeUrl = String.fromEnvironment(
+    "oauth_exchange_url",
+    defaultValue: "https://assets.vyakunin.org/oauth/exchange",
+  );
+
+  static bool get hasPlayOauth =>
+      enableOauth && playOauthClientId.isNotEmpty && oauthExchangeUrl.isNotEmpty;
+
   // Derived from bakedSubscriptionUrl. /sub/<token> → /app/version.json
   // and /app/<token>/family_vpn.apk live at the same host. Returns empty
   // strings when there's no baked sub (then the update channel is moot).

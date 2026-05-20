@@ -17,6 +17,9 @@ dependencies:
   flutter_localizations:
     sdk: flutter
   intl: ^0.20.2
+  # family_vpn fork (Play distribution branch): Sign-in with Google for the
+  # OAuth-based sub URL exchange. Direct distribution does not link this in.
+  google_sign_in: ^6.2.1
 
   # lucy_editor: ^1.0.5
   # re_highlight: ^0.0.3
