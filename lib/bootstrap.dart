@@ -176,6 +176,29 @@ Future<void> lazyBootstrap(WidgetsBinding widgetsBinding, Environment env) async
   if (!kIsWeb) {
     FlutterNativeSplash.remove();
   }
+
+  // family_vpn fork: pre-request the Android system VPN-permission dialog on
+  // the very first launch, so the popup appears in an obvious moment instead
+  // of mid-Connect tap. Without this, a relative taps Connect, the popup
+  // shows, they may accidentally dismiss it, the core fails with
+  // "configure tun interface: permission denied", and they don't know what
+  // happened. Gated by the vpnPermissionRequested pref — fires exactly once
+  // per install.
+  if (PlatformUtils.isAndroid) {
+    final prefs = container.read(sharedPreferencesProvider).requireValue;
+    final alreadyRequested = prefs.getBool("vpn_permission_requested") ?? false;
+    if (!alreadyRequested) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        try {
+          final granted = await container.read(hiddifyCoreServiceProvider).core.requestVpnPermission();
+          Logger.bootstrap.info("first-launch VPN perm pre-request: granted=$granted");
+          await prefs.setBool("vpn_permission_requested", true);
+        } catch (e, s) {
+          Logger.bootstrap.warning("first-launch VPN perm pre-request failed: $e", e, s);
+        }
+      });
+    }
+  }
 }
 
 Future<T> _init<T>(String name, Future<T> Function() initializer, {int? timeout}) async {

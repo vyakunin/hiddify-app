@@ -107,6 +107,40 @@ class MainActivity : FlutterFragmentActivity(), ServiceConnection.Callback {
             true
         }
     }
+
+    // family_vpn fork: perm-only path used by (a) first-launch pre-request and
+    // (b) auto-retry when the core surfaces 'permission denied' on connect.
+    // Unlike prepare()/prepareLauncher, the result here does NOT start the
+    // VPN service — Dart decides what to do next based on the boolean result.
+    private var prepareOnlyResult: ((Boolean) -> Unit)? = null
+
+    fun requestVpnPermissionOnly(callback: (Boolean) -> Unit) {
+        lifecycleScope.launch(Dispatchers.Main) {
+            try {
+                val intent = VpnService.prepare(this@MainActivity)
+                if (intent == null) {
+                    // already granted
+                    callback(true)
+                    return@launch
+                }
+                prepareOnlyResult = callback
+                prepareOnlyLauncher.launch(intent)
+            } catch (e: Exception) {
+                Log.w(TAG, "requestVpnPermissionOnly failed: ${e.message}")
+                callback(false)
+            }
+        }
+    }
+
+    private val prepareOnlyLauncher =
+        registerForActivityResult(
+            ActivityResultContracts.StartActivityForResult(),
+        ) { result ->
+            val cb = prepareOnlyResult
+            prepareOnlyResult = null
+            cb?.invoke(result.resultCode == RESULT_OK)
+        }
+
     private val notificationPermissionLauncher =
         registerForActivityResult(
             ActivityResultContracts.RequestPermission(),

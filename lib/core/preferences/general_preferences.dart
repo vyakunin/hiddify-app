@@ -104,6 +104,11 @@ abstract class Preferences {
 
   static final storeReviewedByUser = PreferencesNotifier.create<bool, bool>("store_reviewed_by_user", false);
 
+  // family_vpn fork: track whether we've already requested the system VPN
+  // permission once on this install. Pre-request fires on first launch so the
+  // popup appears in an obvious moment rather than mid-Connect tap.
+  static final vpnPermissionRequested = PreferencesNotifier.create<bool, bool>("vpn_permission_requested", false);
+
   static final actionAtClose = PreferencesNotifier.create<ActionsAtClosing, String>(
     "action_at_close",
     ActionsAtClosing.ask,

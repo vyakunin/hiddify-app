@@ -34,6 +34,9 @@ class MethodHandler(private val scope: CoroutineScope) : FlutterPlugin,
             Restart("restart"),
             AddGrpcClientPublicKey("add_grpc_client_public_key"),
             GetGrpcServerPublicKey("get_grpc_server_public_key"),
+            // family_vpn fork: perm-only paths for first-launch pre-request
+            // and post-denied auto-retry. Does NOT start the VPN service.
+            PrepareVpnPermission("prepare_vpn_permission"),
 
         }
     }
@@ -130,6 +133,15 @@ class MethodHandler(private val scope: CoroutineScope) : FlutterPlugin,
                         mainActivity.startService()
                         success(true)
                     }
+                }
+            }
+
+            Trigger.PrepareVpnPermission.method -> {
+                // Synchronously launch the Android system VPN-permission dialog
+                // and return granted=true|false to Dart. Does NOT start service.
+                val mainActivity = MainActivity.instance
+                mainActivity.requestVpnPermissionOnly { granted ->
+                    result.success(granted)
                 }
             }
 

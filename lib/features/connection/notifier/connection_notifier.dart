@@ -10,6 +10,7 @@ import 'package:hiddify/features/connection/model/connection_failure.dart';
 import 'package:hiddify/features/connection/model/connection_status.dart';
 import 'package:hiddify/features/profile/model/profile_entity.dart';
 import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
+import 'package:hiddify/hiddifycore/hiddify_core_service_provider.dart';
 import 'package:hiddify/hiddifycore/init_signal.dart';
 import 'package:hiddify/utils/utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -144,6 +145,34 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
       ConnectionFailure err,
     ) async {
       loggy.warning("error connecting", err);
+      // family_vpn fork: when the core surfaces a VPN-permission denial,
+      // re-trigger the Android system VPN-permission dialog instead of just
+      // showing an alert with no remediation. On grant, retry the connect
+      // exactly once. Avoids the "tap Connect → cryptic error" UX trap.
+      if (Platform.isAndroid && err is MissingVpnPermission) {
+        loggy.info("MissingVpnPermission caught — re-triggering system VPN perm dialog");
+        try {
+          final granted = await ref.read(hiddifyCoreServiceProvider).core.requestVpnPermission();
+          loggy.info("re-triggered VPN perm dialog: granted=$granted");
+          if (granted) {
+            // Retry once; do NOT recurse through _connect's SingleCall guard
+            // (it's still held), call the repo directly.
+            await _connectionRepo.connect(activeProfile, ref.read(Preferences.disableMemoryLimit)).mapLeft((
+              ConnectionFailure retryErr,
+            ) async {
+              loggy.warning("retry after VPN perm grant still failed", retryErr);
+              await ref
+                  .read(dialogNotifierProvider.notifier)
+                  .showCustomAlertFromErr(retryErr.present(ref.read(translationsProvider).requireValue));
+              await ref.read(Preferences.startedByUser.notifier).update(false);
+              state = AsyncError(retryErr, StackTrace.current);
+            }).run();
+            return;
+          }
+        } catch (e, s) {
+          loggy.warning("re-triggering VPN perm dialog failed: $e", e, s);
+        }
+      }
       //Go err is not normal object to see the go errors are string and need to be dumped
       await ref
           .read(dialogNotifierProvider.notifier)

@@ -43,6 +43,15 @@ class CoreInterface {
     return true;
   }
 
+  // family_vpn fork: trigger the Android system VPN-permission dialog without
+  // starting the VPN service. Used for first-launch pre-request and for
+  // auto-retry after the core surfaces "permission denied" on connect.
+  // Returns true if perm was granted (or already granted), false on denial /
+  // unsupported platform. Default impl is a no-op returning true (desktop).
+  Future<bool> requestVpnPermission() async {
+    return true;
+  }
+
   bool isInitialized() {
     try {
       bgClient; // touch it

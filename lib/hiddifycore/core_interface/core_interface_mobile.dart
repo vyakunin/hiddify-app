@@ -34,6 +34,17 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
   bool _isBgClientAvailable = false;
   bool _debug = false;
 
+  @override
+  Future<bool> requestVpnPermission() async {
+    try {
+      final granted = await methodChannel.invokeMethod<bool>("prepare_vpn_permission");
+      return granted ?? false;
+    } catch (e) {
+      _logger.warning("requestVpnPermission failed: $e");
+      return false;
+    }
+  }
+
   late LastStream<CoreStatus> _status;
   @override
   Future<String> setup(Directories directories, bool debug, int mode) async {
