@@ -109,6 +109,14 @@ abstract class Preferences {
   // popup appears in an obvious moment rather than mid-Connect tap.
   static final vpnPermissionRequested = PreferencesNotifier.create<bool, bool>("vpn_permission_requested", false);
 
+  // family_vpn fork: timestamp (millisecondsSinceEpoch) when the current
+  // session became Connected. Set by ConnectionNotifier when transitioning
+  // from a definite non-Connected state to Connected; cleared on Disconnect.
+  // Used by SessionStatsPanel to keep the duration counter ticking across
+  // app process restarts while the bg service stays connected.
+  // 0 means "no active session".
+  static final connectedSinceMs = PreferencesNotifier.create<int, int>("connected_since_ms", 0);
+
   static final actionAtClose = PreferencesNotifier.create<ActionsAtClosing, String>(
     "action_at_close",
     ActionsAtClosing.ask,

@@ -6,6 +6,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:hiddify/core/preferences/general_preferences.dart';
 import 'package:hiddify/features/connection/model/connection_status.dart';
 import 'package:hiddify/features/connection/notifier/connection_notifier.dart';
 import 'package:hiddify/features/log/data/log_bundle.dart';
@@ -25,19 +26,13 @@ class SessionStatsPanel extends HookConsumerWidget {
     final statsAsync = ref.watch(statsNotifierProvider);
     final activeProxy = ref.watch(activeProxyNotifierProvider).valueOrNull;
 
-    // Local session-start tracking: begin counting when we transition to
-    // Connected, reset on disconnect.
-    final sessionStart = useState<DateTime?>(null);
+    // family_vpn fork: session start comes from a persisted timestamp
+    // (Preferences.connectedSinceMs) so the duration counter survives app
+    // process restarts while the bg service stays connected. The pref is
+    // written by ConnectionNotifier on the non-Connected -> Connected
+    // transition and cleared on Disconnect.
+    final connectedSinceMs = ref.watch(Preferences.connectedSinceMs);
     final ticker = useState(0);
-
-    useEffect(() {
-      if (connection is Connected && sessionStart.value == null) {
-        sessionStart.value = DateTime.now();
-      } else if (connection is Disconnected) {
-        sessionStart.value = null;
-      }
-      return null;
-    }, [connection.runtimeType]);
 
     useEffect(() {
       final timer = Timer.periodic(
@@ -49,9 +44,8 @@ class SessionStatsPanel extends HookConsumerWidget {
 
     Widget body;
     if (connection is Connected) {
-      final start = sessionStart.value;
-      final elapsed = start != null
-          ? DateTime.now().difference(start)
+      final elapsed = connectedSinceMs > 0
+          ? DateTime.now().difference(DateTime.fromMillisecondsSinceEpoch(connectedSinceMs))
           : Duration.zero;
 
       final stats = statsAsync.valueOrNull;

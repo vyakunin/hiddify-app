@@ -36,12 +36,44 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
         if (next case AsyncData(value: final Connected _)) {
           await ref.read(hapticServiceProvider.notifier).heavyImpact();
 
+          // family_vpn fork: persist the connect timestamp so the session
+          // duration counter survives app-process restarts while the bg
+          // service stays connected. Only set on a true non-Connected ->
+          // Connected transition; reopening the app on an already-running
+          // session goes through AsyncLoading -> Connected and must NOT
+          // overwrite the original start time.
+          await ref
+              .read(Preferences.connectedSinceMs.notifier)
+              .update(DateTime.now().millisecondsSinceEpoch);
+
           if (Platform.isAndroid && !ref.read(Preferences.storeReviewedByUser)) {
             if (await InAppReview.instance.isAvailable()) {
               InAppReview.instance.requestReview();
               ref.read(Preferences.storeReviewedByUser.notifier).update(true);
             }
           }
+        }
+      }
+      // family_vpn fork: fallback for the silent_start / app-reopen-on-stale-
+      // session case. If the very first emission lands in Connected (previous
+      // is AsyncLoading) and pref is still 0, we don't know the real start
+      // time — best-effort: set it to now so the counter at least starts
+      // ticking instead of showing 00:00:00 forever.
+      if (previous is AsyncLoading<ConnectionStatus>) {
+        if (next case AsyncData(value: final Connected _)) {
+          if (ref.read(Preferences.connectedSinceMs) == 0) {
+            await ref
+                .read(Preferences.connectedSinceMs.notifier)
+                .update(DateTime.now().millisecondsSinceEpoch);
+          }
+        }
+      }
+      // family_vpn fork: clear the persisted connect timestamp on any
+      // Disconnected emission so a fresh session restarts from 0.
+      if (next case AsyncData(value: final Disconnected _)) {
+        final current = ref.read(Preferences.connectedSinceMs);
+        if (current != 0) {
+          await ref.read(Preferences.connectedSinceMs.notifier).update(0);
         }
       }
     });
