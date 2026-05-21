@@ -12,7 +12,10 @@ import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:hiddify/core/logger/logger.dart';
 import 'package:hiddify/core/model/environment.dart';
+import 'package:hiddify/features/log/data/log_bundle.dart';
+import 'package:hiddify/features/log/data/log_data_providers.dart';
 import 'package:hiddify/features/profile/data/profile_data_providers.dart';
+import 'package:hiddify/utils/utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 class OauthSigninPage extends ConsumerStatefulWidget {
@@ -36,21 +39,33 @@ class _OauthSigninPageState extends ConsumerState<OauthSigninPage> {
       _busy = true;
       _error = null;
     });
+    Logger.bootstrap.info(
+      "oauth: starting sign-in (serverClientId=${Environment.playOauthClientId.substring(0, 24)}…, "
+      "exchange=${Environment.oauthExchangeUrl})",
+    );
     try {
+      Logger.bootstrap.info("oauth: calling GoogleSignIn.signIn()");
       final account = await _signIn.signIn();
       if (account == null) {
+        Logger.bootstrap.warning("oauth: GoogleSignIn returned null (cancelled by user)");
         setState(() {
           _busy = false;
           _error = "sign-in cancelled";
         });
         return;
       }
+      Logger.bootstrap.info("oauth: got account (email=${account.email})");
       final auth = await account.authentication;
       final idToken = auth.idToken;
+      Logger.bootstrap.info(
+        "oauth: got authentication (idToken present=${idToken != null && idToken.isNotEmpty}, "
+        "accessToken present=${auth.accessToken != null && auth.accessToken!.isNotEmpty})",
+      );
       if (idToken == null || idToken.isEmpty) {
         throw StateError("google_sign_in returned no ID token (check OAuth client config)");
       }
 
+      Logger.bootstrap.info("oauth: POSTing to ${Environment.oauthExchangeUrl}");
       final dio = Dio(BaseOptions(
         connectTimeout: const Duration(seconds: 15),
         receiveTimeout: const Duration(seconds: 15),
@@ -64,6 +79,7 @@ class _OauthSigninPageState extends ConsumerState<OauthSigninPage> {
           validateStatus: (_) => true,
         ),
       );
+      Logger.bootstrap.info("oauth: exchange responded HTTP ${resp.statusCode} body=${resp.data}");
       if (resp.statusCode != 200) {
         throw StateError(_friendlyError(resp.statusCode, resp.data));
       }
@@ -72,6 +88,7 @@ class _OauthSigninPageState extends ConsumerState<OauthSigninPage> {
       if (subUrl == null || subUrl.isEmpty) {
         throw StateError("server returned empty sub URL");
       }
+      Logger.bootstrap.info("oauth: importing profile from sub URL");
 
       final repo = await ref.read(profileRepositoryProvider.future);
       final result = await repo.upsertRemote(subUrl).run();
@@ -89,6 +106,19 @@ class _OauthSigninPageState extends ConsumerState<OauthSigninPage> {
           _error = "$e";
         });
       }
+    }
+  }
+
+  Future<void> _shareLogs() async {
+    try {
+      final pathResolver = ref.read(logPathResolverProvider);
+      final file = await LogBundle(pathResolver).buildCombinedFile();
+      await UriUtils.tryShareOrLaunchFile(
+        Uri.parse(file.path),
+        fileOrDir: file.parent.uri,
+      );
+    } catch (e, s) {
+      Logger.bootstrap.warning("oauth: share-logs failed: $e", e, s);
     }
   }
 
@@ -141,6 +171,22 @@ class _OauthSigninPageState extends ConsumerState<OauthSigninPage> {
                 label: Text(_busy ? "..." : "Sign in with Google"),
                 style: FilledButton.styleFrom(
                   minimumSize: const Size.fromHeight(52),
+                ),
+              ),
+              const SizedBox(height: 16),
+              // family_vpn fork: log-share entrypoint mirroring the home-screen
+              // button. If sign-in fails repeatedly the user is stuck on this
+              // page with no other way to get diagnostic logs out.
+              TextButton.icon(
+                onPressed: _shareLogs,
+                icon: const Text("📋", style: TextStyle(fontSize: 16)),
+                label: const Text("Поделиться логами"),
+                style: TextButton.styleFrom(
+                  foregroundColor: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                  textStyle: theme.textTheme.bodySmall,
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
               ),
               const Spacer(),
