@@ -18,10 +18,19 @@ class Application : Application() {
     override fun attachBaseContext(base: Context?) {
         super.attachBaseContext(base)
         application = this
+        // Install JVM uncaught handler at the earliest possible hook —
+        // before Application.onCreate, before any Flutter plugin or
+        // libbox init can fail. See CrashReporter.kt.
+        CrashReporter.install(this)
     }
 
     override fun onCreate() {
         super.onCreate()
+
+        // Capture any native / ANR / OOM crashes from the previous process
+        // (JVM handler can't see those — process is already dead by signal
+        // handler time). Idempotent across launches.
+        CrashReporter.checkPastCrashes(this)
 
         Seq.setContext(this)
 

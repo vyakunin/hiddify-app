@@ -11,4 +11,8 @@
          change. -->
     <cache-path name="fork_update_cache" path="/" />
     <files-path name="fork_update_files" path="fork_update/" />
+    <!-- CrashReporter writes to getExternalFilesDir(null)/crashes/. Sharing
+         via ACTION_SEND_MULTIPLE needs content:// URIs vended by the same
+         FileProvider authority. -->
+    <external-files-path name="family_vpn_crashes" path="crashes/" />
 </paths>
