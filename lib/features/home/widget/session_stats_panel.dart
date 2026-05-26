@@ -54,10 +54,14 @@ class SessionStatsPanel extends HookConsumerWidget {
       final downSpeed = stats?.downlink.toInt() ?? 0;
       final upSpeed = stats?.uplink.toInt() ?? 0;
       final latencyMs = activeProxy?.urlTestDelay ?? 0;
+      final exit = _exitLabel(activeProxy?.host ?? "", activeProxy?.tag ?? "");
 
       body = Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          if (exit != null)
+            _statRow(theme, "🌍  Выход через", exit),
+          if (exit != null) const SizedBox(height: 8),
           _statRow(theme, "⏱  Время сессии", _formatDuration(elapsed)),
           const SizedBox(height: 8),
           _statRow(
@@ -182,5 +186,25 @@ class SessionStatsPanel extends HookConsumerWidget {
 
   static String _formatRate(int bytesPerSec) {
     return "${_formatBytes(bytesPerSec)}/с";
+  }
+
+  // family_vpn fork: map the active outbound's host (or, as a fallback, its
+  // tag — which sub_server formats as "family_vpn — <user> — <host> — <cover>")
+  // to a human-friendly country label. Returns null when we can't tell — e.g.
+  // a group's aggregate row or a host we haven't deployed.
+  //
+  // Known data-plane hosts (kept in sync with /opt/stack/family_vpn/data_plane.yaml
+  // on every host):
+  //   74.208.22.246              → US (IONOS VPS, Lenexa KS)
+  //   node1.vyakunin.org         → DE (homeserver, Berlin) — primary DNS name
+  //   node1.visa-bulletin.us     → DE (homeserver) — backcompat DNS name
+  static String? _exitLabel(String host, String tag) {
+    final probe = host.isNotEmpty ? host : tag;
+    if (probe.contains("74.208.22.246")) return "🇺🇸  США (Lenexa)";
+    if (probe.contains("node1.vyakunin.org") ||
+        probe.contains("node1.visa-bulletin.us")) {
+      return "🇩🇪  Германия (Berlin)";
+    }
+    return null;
   }
 }

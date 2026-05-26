@@ -68,12 +68,20 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
           }
         }
       }
-      // family_vpn fork: clear the persisted connect timestamp on any
-      // Disconnected emission so a fresh session restarts from 0.
+      // family_vpn fork: clear the persisted connect timestamp only on a
+      // genuine Connected -> Disconnected transition (user tapped
+      // Disconnect, or core lost the tunnel). On cold-start the Dart side
+      // may emit AsyncLoading -> Disconnected briefly before libbox reports
+      // the bg tunnel is still up; clearing the pref there would wipe the
+      // persisted session start and the subsequent Connected emission
+      // would reset the counter to "now" — exactly the timer-resets-on-
+      // reopen bug.
       if (next case AsyncData(value: final Disconnected _)) {
-        final current = ref.read(Preferences.connectedSinceMs);
-        if (current != 0) {
-          await ref.read(Preferences.connectedSinceMs.notifier).update(0);
+        if (previous case AsyncData(value: final Connected _)) {
+          final current = ref.read(Preferences.connectedSinceMs);
+          if (current != 0) {
+            await ref.read(Preferences.connectedSinceMs.notifier).update(0);
+          }
         }
       }
     });
