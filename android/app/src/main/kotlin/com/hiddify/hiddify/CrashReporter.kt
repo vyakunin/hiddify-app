@@ -4,10 +4,8 @@ import android.app.Activity
 import android.app.ActivityManager
 import android.app.AlertDialog
 import android.app.ApplicationExitInfo
-import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.util.Log
@@ -47,9 +45,10 @@ import java.util.TimeZone
  * Reports are written to <app-external>/crashes/crash_<utc>.txt — app-
  * private external storage, no permission needed. On every Activity start,
  * if there are unsent reports, an AlertDialog asks the user to send them
- * via ACTION_SEND_MULTIPLE, pre-targeting Telegram. On confirm tap we move
- * files to crashes/sent/ so we don't re-prompt. Privacy invariant honored:
- * nothing leaves the device without an explicit user gesture.
+ * via ACTION_SEND_MULTIPLE through the Android system chooser, so they pick
+ * the channel (WhatsApp / Gmail / Telegram-as-document / …). On confirm tap
+ * we move files to crashes/sent/ so we don't re-prompt. Privacy invariant
+ * honored: nothing leaves the device without an explicit user gesture.
  */
 object CrashReporter {
     private const val TAG = "A/CrashReporter"
@@ -204,29 +203,17 @@ object CrashReporter {
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
 
-        // Pre-target Telegram if installed; fall back to system chooser.
-        val telegramPkg = listOf("org.telegram.messenger", "org.telegram.messenger.web")
-            .firstOrNull { isPkgInstalled(activity, it) }
-
-        val toLaunch = if (telegramPkg != null) {
-            Intent(base).apply { setPackage(telegramPkg) }
-        } else {
-            Intent.createChooser(base, "Отправить отчёт об ошибке")
-        }
-
+        // Always show the system chooser. Pre-targeting Telegram used to
+        // launch Telegram directly, but Telegram refuses ACTION_SEND_MULTIPLE
+        // text/plain with "unsupported format" and the ActivityNotFoundException
+        // fallback never fires (Telegram IS resolved, it just rejects the
+        // payload internally). Letting the user pick gives them apps that
+        // actually accept the attachment — WhatsApp, Gmail, Files, or
+        // Telegram-as-document if they explicitly want it.
         try {
-            activity.startActivity(toLaunch)
-        } catch (e: ActivityNotFoundException) {
-            // Explicit Telegram target failed (e.g. Telegram doesn't accept
-            // ACTION_SEND_MULTIPLE for this mime). Fall back to chooser.
-            try {
-                activity.startActivity(Intent.createChooser(base, "Отправить отчёт об ошибке"))
-            } catch (t: Throwable) {
-                Log.e(TAG, "fallback chooser also failed", t)
-                return
-            }
+            activity.startActivity(Intent.createChooser(base, "Отправить отчёт об ошибке"))
         } catch (t: Throwable) {
-            Log.e(TAG, "startActivity for share threw", t)
+            Log.e(TAG, "startActivity for chooser threw", t)
             return
         }
 
@@ -250,16 +237,6 @@ object CrashReporter {
                     Log.e(TAG, "could not move ${f.name} to sent/", t)
                 }
             }
-        }
-    }
-
-    private fun isPkgInstalled(ctx: Context, pkg: String): Boolean {
-        return try {
-            @Suppress("DEPRECATION")
-            ctx.packageManager.getPackageInfo(pkg, 0)
-            true
-        } catch (_: PackageManager.NameNotFoundException) {
-            false
         }
     }
 
