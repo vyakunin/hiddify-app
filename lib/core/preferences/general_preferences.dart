@@ -109,13 +109,13 @@ abstract class Preferences {
   // popup appears in an obvious moment rather than mid-Connect tap.
   static final vpnPermissionRequested = PreferencesNotifier.create<bool, bool>("vpn_permission_requested", false);
 
-  // family_vpn fork: timestamp (millisecondsSinceEpoch) when the current
-  // session became Connected. Set by ConnectionNotifier when transitioning
-  // from a definite non-Connected state to Connected; cleared on Disconnect.
-  // Used by SessionStatsPanel to keep the duration counter ticking across
-  // app process restarts while the bg service stays connected.
-  // 0 means "no active session".
-  static final connectedSinceMs = PreferencesNotifier.create<int, int>("connected_since_ms", 0);
+  // family_vpn fork: connected-since timestamp is Kotlin-authoritative.
+  // BoxService writes Settings.connectedSinceMs on Status.Started, clears
+  // on Status.Stopped. Dart reads via CoreInterface.getConnectedSinceMs()
+  // (a MethodChannel call). The Dart-side PreferencesNotifier was removed
+  // because Activity rebuilds caused the connection-status stream to emit
+  // spurious Disconnected on foreground resume, which the old transition
+  // listener interpreted as a real disconnect and reset the timer.
 
   static final actionAtClose = PreferencesNotifier.create<ActionsAtClosing, String>(
     "action_at_close",

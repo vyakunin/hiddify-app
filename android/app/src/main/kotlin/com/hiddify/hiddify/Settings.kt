@@ -158,6 +158,15 @@ object Settings {
         get() = preferences.getBoolean(SettingsKey.START_CORE_ON_STARTING_SERVICE, false)
         set(value) = preferences.edit().putBoolean(SettingsKey.START_CORE_ON_STARTING_SERVICE, value).apply()
 
+    // family_vpn fork: tunnel-up wall-clock timestamp, written by BoxService
+    // on Status.Started and cleared on Status.Stopped. Read by Dart via the
+    // existing Preferences.connectedSinceMs pref (same flutter. key) — keeps
+    // Kotlin as the single writer so Activity-rebuild glitches in the Dart
+    // connection-status stream can never reset the visible session timer.
+    var connectedSinceMs: Long
+        get() = preferences.getLong("flutter.connected_since_ms", 0L)
+        set(value) = preferences.edit().putLong("flutter.connected_since_ms", value).apply()
+
 
 }
 

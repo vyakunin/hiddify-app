@@ -182,6 +182,9 @@ class BoxService(
                 return
             }
             status.postValue(Status.Started)
+            // family_vpn fork: stamp tunnel-up timestamp (Kotlin-authoritative,
+            // survives Activity rebuilds / Dart stream re-subscriptions).
+            Settings.connectedSinceMs = System.currentTimeMillis()
 
             if (Settings.startCoreAfterStartingService){
                 Mobile.start("","")
@@ -294,6 +297,8 @@ class BoxService(
 //            }
 //            commandServer = null
             Settings.startedByUser = false
+            // family_vpn fork: clear tunnel-up timestamp on real stop.
+            Settings.connectedSinceMs = 0L
             withContext(Dispatchers.Main) {
                 Mobile.close(4L)
                 status.value = Status.Stopped
@@ -305,6 +310,8 @@ class BoxService(
 
     private suspend fun stopAndAlert(type: Alert, message: String? = null) {
         Settings.startedByUser = false
+        // family_vpn fork: clear tunnel-up timestamp on error stop.
+        Settings.connectedSinceMs = 0L
         withContext(Dispatchers.Main) {
             if (receiverRegistered) {
                 service.unregisterReceiver(receiver)

@@ -52,6 +52,16 @@ class CoreInterface {
     return true;
   }
 
+  // family_vpn fork: Kotlin-authoritative tunnel-up timestamp (ms since
+  // epoch). Returns 0 when the tunnel is not running. Used by the session
+  // stats panel so the timer survives Activity rebuilds / Dart stream
+  // re-subscriptions (the connection-status stream emits spurious
+  // Disconnected on resume which would otherwise reset the visible timer).
+  // Default impl is 0 (desktop has no Kotlin tunnel).
+  Future<int> getConnectedSinceMs() async {
+    return 0;
+  }
+
   bool isInitialized() {
     try {
       bgClient; // touch it

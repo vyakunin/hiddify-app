@@ -38,6 +38,14 @@ class MethodHandler(private val scope: CoroutineScope) : FlutterPlugin,
             // and post-denied auto-retry. Does NOT start the VPN service.
             PrepareVpnPermission("prepare_vpn_permission"),
 
+            // family_vpn fork: Kotlin-authoritative session-timer source of
+            // truth. BoxService writes Settings.connectedSinceMs on
+            // Status.Started, clears on Status.Stopped. Dart calls this on
+            // Connected emissions to refresh its cache (Flutter
+            // shared_preferences doesn't notice native-side writes on its
+            // own).
+            GetConnectedSinceMs("get_connected_since_ms"),
+
         }
     }
 
@@ -143,6 +151,10 @@ class MethodHandler(private val scope: CoroutineScope) : FlutterPlugin,
                 mainActivity.requestVpnPermissionOnly { granted ->
                     result.success(granted)
                 }
+            }
+
+            Trigger.GetConnectedSinceMs.method -> {
+                result.success(Settings.connectedSinceMs)
             }
 
             Trigger.Stop.method -> {

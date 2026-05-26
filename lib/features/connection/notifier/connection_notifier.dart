@@ -32,55 +32,23 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
 
     listenSelf((previous, next) async {
       if (previous == next) return;
+      // family_vpn fork: the timer-start timestamp is owned by Kotlin
+      // (BoxService writes connectedSinceMs on Status.Started, clears on
+      // Status.Stopped). Dart side previously also wrote this pref on
+      // state-stream transitions, but Activity rebuilds (background→
+      // foreground while the bg tunnel stays up) cause spurious
+      // Connected→Disconnected→Connected emissions that reset the timer.
+      // Letting Kotlin be the sole writer makes the timer survive every
+      // Activity rebuild / stream re-subscription.
       if (previous case AsyncData(:final value) when !value.isConnected) {
         if (next case AsyncData(value: final Connected _)) {
           await ref.read(hapticServiceProvider.notifier).heavyImpact();
-
-          // family_vpn fork: persist the connect timestamp so the session
-          // duration counter survives app-process restarts while the bg
-          // service stays connected. Only set on a true non-Connected ->
-          // Connected transition; reopening the app on an already-running
-          // session goes through AsyncLoading -> Connected and must NOT
-          // overwrite the original start time.
-          await ref
-              .read(Preferences.connectedSinceMs.notifier)
-              .update(DateTime.now().millisecondsSinceEpoch);
 
           if (Platform.isAndroid && !ref.read(Preferences.storeReviewedByUser)) {
             if (await InAppReview.instance.isAvailable()) {
               InAppReview.instance.requestReview();
               ref.read(Preferences.storeReviewedByUser.notifier).update(true);
             }
-          }
-        }
-      }
-      // family_vpn fork: fallback for the silent_start / app-reopen-on-stale-
-      // session case. If the very first emission lands in Connected (previous
-      // is AsyncLoading) and pref is still 0, we don't know the real start
-      // time — best-effort: set it to now so the counter at least starts
-      // ticking instead of showing 00:00:00 forever.
-      if (previous is AsyncLoading<ConnectionStatus>) {
-        if (next case AsyncData(value: final Connected _)) {
-          if (ref.read(Preferences.connectedSinceMs) == 0) {
-            await ref
-                .read(Preferences.connectedSinceMs.notifier)
-                .update(DateTime.now().millisecondsSinceEpoch);
-          }
-        }
-      }
-      // family_vpn fork: clear the persisted connect timestamp only on a
-      // genuine Connected -> Disconnected transition (user tapped
-      // Disconnect, or core lost the tunnel). On cold-start the Dart side
-      // may emit AsyncLoading -> Disconnected briefly before libbox reports
-      // the bg tunnel is still up; clearing the pref there would wipe the
-      // persisted session start and the subsequent Connected emission
-      // would reset the counter to "now" — exactly the timer-resets-on-
-      // reopen bug.
-      if (next case AsyncData(value: final Disconnected _)) {
-        if (previous case AsyncData(value: final Connected _)) {
-          final current = ref.read(Preferences.connectedSinceMs);
-          if (current != 0) {
-            await ref.read(Preferences.connectedSinceMs.notifier).update(0);
           }
         }
       }

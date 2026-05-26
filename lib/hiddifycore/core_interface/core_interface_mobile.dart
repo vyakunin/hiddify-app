@@ -45,6 +45,17 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
     }
   }
 
+  @override
+  Future<int> getConnectedSinceMs() async {
+    try {
+      final v = await methodChannel.invokeMethod<int>("get_connected_since_ms");
+      return v ?? 0;
+    } catch (e) {
+      _logger.warning("getConnectedSinceMs failed: $e");
+      return 0;
+    }
+  }
+
   late LastStream<CoreStatus> _status;
   @override
   Future<String> setup(Directories directories, bool debug, int mode) async {

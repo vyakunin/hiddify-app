@@ -6,13 +6,13 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
-import 'package:hiddify/core/preferences/general_preferences.dart';
 import 'package:hiddify/features/connection/model/connection_status.dart';
 import 'package:hiddify/features/connection/notifier/connection_notifier.dart';
 import 'package:hiddify/features/log/data/log_bundle.dart';
 import 'package:hiddify/features/log/data/log_data_providers.dart';
 import 'package:hiddify/features/proxy/active/active_proxy_notifier.dart';
 import 'package:hiddify/features/stats/notifier/stats_notifier.dart';
+import 'package:hiddify/hiddifycore/hiddify_core_service_provider.dart';
 import 'package:hiddify/utils/utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
@@ -26,12 +26,14 @@ class SessionStatsPanel extends HookConsumerWidget {
     final statsAsync = ref.watch(statsNotifierProvider);
     final activeProxy = ref.watch(activeProxyNotifierProvider).valueOrNull;
 
-    // family_vpn fork: session start comes from a persisted timestamp
-    // (Preferences.connectedSinceMs) so the duration counter survives app
-    // process restarts while the bg service stays connected. The pref is
-    // written by ConnectionNotifier on the non-Connected -> Connected
-    // transition and cleared on Disconnect.
-    final connectedSinceMs = ref.watch(Preferences.connectedSinceMs);
+    // family_vpn fork: session-start timestamp is owned by Kotlin
+    // (BoxService writes Settings.connectedSinceMs on Status.Started,
+    // clears on Status.Stopped). We fetch it via MethodChannel on every
+    // transition into Connected — that way Activity rebuilds and Dart
+    // stream re-subscriptions can never reset the visible timer (they
+    // briefly emit Disconnected→Connected while the bg tunnel stays up,
+    // and the value Kotlin holds doesn't change across that glitch).
+    final connectedSinceMs = useState<int>(0);
     final ticker = useState(0);
 
     useEffect(() {
@@ -42,10 +44,34 @@ class SessionStatsPanel extends HookConsumerWidget {
       return timer.cancel;
     }, const []);
 
+    final isConnected = connection is Connected;
+    useEffect(() {
+      if (!isConnected) {
+        connectedSinceMs.value = 0;
+        return null;
+      }
+      // Fetch immediately on entering Connected; the value is stable for the
+      // rest of the session so a single fetch per Connected transition is
+      // enough. If the very first fetch races with BoxService's write, the
+      // tick-driven rebuild won't re-fetch — so we schedule one retry after
+      // 300ms to cover that narrow window.
+      var disposed = false;
+      Future<void> fetch() async {
+        final v = await ref.read(hiddifyCoreServiceProvider).core.getConnectedSinceMs();
+        if (!disposed) connectedSinceMs.value = v;
+      }
+      fetch();
+      Future.delayed(const Duration(milliseconds: 300), () {
+        if (disposed) return;
+        if (connectedSinceMs.value == 0) fetch();
+      });
+      return () => disposed = true;
+    }, [isConnected]);
+
     Widget body;
     if (connection is Connected) {
-      final elapsed = connectedSinceMs > 0
-          ? DateTime.now().difference(DateTime.fromMillisecondsSinceEpoch(connectedSinceMs))
+      final elapsed = connectedSinceMs.value > 0
+          ? DateTime.now().difference(DateTime.fromMillisecondsSinceEpoch(connectedSinceMs.value))
           : Duration.zero;
 
       final stats = statsAsync.valueOrNull;
