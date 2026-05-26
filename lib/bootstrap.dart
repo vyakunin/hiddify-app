@@ -22,6 +22,7 @@ import 'package:hiddify/features/connection/notifier/connection_diagnostics.dart
 import 'package:hiddify/features/log/data/log_data_providers.dart';
 import 'package:hiddify/features/fork_update/fork_update_service.dart';
 import 'package:hiddify/features/profile/data/profile_data_providers.dart';
+import 'package:hiddify/features/profile/model/profile_entity.dart';
 import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
 import 'package:hiddify/features/system_tray/notifier/system_tray_notifier.dart';
 import 'package:hiddify/features/window/notifier/window_notifier.dart';
@@ -111,35 +112,48 @@ Future<void> lazyBootstrap(WidgetsBinding widgetsBinding, Environment env) async
 
   await _init("hiddify-core", () => container.read(hiddifyCoreServiceProvider).init());
 
-  // family_vpn fork: refresh the baked subscription after hiddify-core init.
-  // Daily port-rotation + cover-host rotation invalidates the cached
-  // profile; without this the app would silently show "Подключено" with
-  // 0 B/s. Must run AFTER hiddify-core init — upsertRemote triggers
+  // family_vpn fork: refresh the active profile's subscription URL after
+  // hiddify-core init. Daily port-rotation + cover-host rotation invalidates
+  // the cached profile; without this the app would silently show "Подключено"
+  // with 0 B/s. Must run AFTER hiddify-core init — upsertRemote triggers
   // HiddifyCoreService.changeOptions which needs fgClient initialized.
-  // Skip on first launch (no profile yet) — AddProfile flow handles that.
-  if (Environment.hasBakedSubscription) {
-    await _safeInit("baked sub refresh", () async {
-      final hasProfile = await container.read(hasAnyProfileProvider.future);
-      if (!hasProfile) {
-        Logger.bootstrap.debug("no profile yet — first launch, skipping refresh");
-        return;
-      }
-      final repo = await container.read(profileRepositoryProvider.future);
-      await repo
-          .upsertRemote(Environment.bakedSubscriptionUrl)
-          .match(
-            (f) {
-              Logger.bootstrap.warning("baked sub refresh failed (using cached): $f");
-              return null;
-            },
-            (_) {
-              Logger.bootstrap.info("baked sub refresh ok");
-              return null;
-            },
-          )
-          .run();
-    }, timeout: 2500);
-  }
+  //
+  // Two flavors share this code path:
+  //   - baked sub (general / direct distribution): the URL was baked at build
+  //     time and AddProfile imported it on first launch into the profile repo.
+  //   - OAuth Play: the URL was fetched after Google sign-in at first launch
+  //     and written into the profile repo by the OAuth exchange flow.
+  // In both cases, by the time we reach this point the URL we want to refresh
+  // is the active profile's URL — derive it from the repo, don't read
+  // Environment.bakedSubscriptionUrl (which is empty in the OAuth flavor and
+  // was the bug behind 2026-05-26 incident: OAuth users had no per-launch
+  // refresh and stayed on a stale cached profile across daily rotation).
+  await _safeInit("active profile refresh", () async {
+    final hasProfile = await container.read(hasAnyProfileProvider.future);
+    if (!hasProfile) {
+      Logger.bootstrap.debug("no profile yet — first launch, skipping refresh");
+      return;
+    }
+    final activeProfile = await container.read(activeProfileProvider.future);
+    if (activeProfile is! RemoteProfileEntity || activeProfile.url.isEmpty) {
+      Logger.bootstrap.debug("active profile is local or missing URL — skipping refresh");
+      return;
+    }
+    final repo = await container.read(profileRepositoryProvider.future);
+    await repo
+        .upsertRemote(activeProfile.url)
+        .match(
+          (f) {
+            Logger.bootstrap.warning("active profile refresh failed (using cached): $f");
+            return null;
+          },
+          (_) {
+            Logger.bootstrap.info("active profile refresh ok");
+            return null;
+          },
+        )
+        .run();
+  }, timeout: 2500);
 
   // family_vpn fork: start the diagnostic logger. Pure side-effect provider —
   // attaches a 30s heartbeat + connection-state listener that writes shape
