@@ -193,7 +193,11 @@ object CrashReporter {
         if (uris.isEmpty()) return
 
         val base = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
-            type = "text/plain"
+            // */* forces Telegram to treat the attachment as a document
+            // (its inline text/plain receiver rejects multi-file payloads
+            // with "unsupported format"). WhatsApp / Gmail / Files all
+            // still accept */* fine.
+            type = "*/*"
             putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
             putExtra(Intent.EXTRA_SUBJECT, "Заметки crash report")
             putExtra(
@@ -203,13 +207,8 @@ object CrashReporter {
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
 
-        // Always show the system chooser. Pre-targeting Telegram used to
-        // launch Telegram directly, but Telegram refuses ACTION_SEND_MULTIPLE
-        // text/plain with "unsupported format" and the ActivityNotFoundException
-        // fallback never fires (Telegram IS resolved, it just rejects the
-        // payload internally). Letting the user pick gives them apps that
-        // actually accept the attachment — WhatsApp, Gmail, Files, or
-        // Telegram-as-document if they explicitly want it.
+        // Always show the system chooser so the user can pick any
+        // share-receiving app on the device.
         try {
             activity.startActivity(Intent.createChooser(base, "Отправить отчёт об ошибке"))
         } catch (t: Throwable) {
