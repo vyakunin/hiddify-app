@@ -44,6 +44,21 @@ Future<void> lazyBootstrap(WidgetsBinding widgetsBinding, Environment env) async
   final container = ProviderContainer(overrides: [environmentProvider.overrideWithValue(env)]);
 
   await _init("directories", () => container.read(appDirectoriesProvider.future));
+  // Rotate box.log → box.log.prev so previous-session sing-box / xray logs
+  // survive a relaunch (matches FileLogPrinter's rotation of app.log). The
+  // LogBundle picks both .prev halves up — without this, an in-app
+  // "Поделиться логами" tap after a crash ships only the freshly-truncated
+  // current-session logs and the operator has nothing to debug from.
+  try {
+    final coreLog = container.read(logPathResolverProvider).coreFile();
+    if (coreLog.existsSync()) {
+      final prev = File("${coreLog.path}.prev");
+      if (prev.existsSync()) prev.deleteSync();
+      coreLog.renameSync(prev.path);
+    }
+  } catch (_) {
+    // rotation failed; sing-box will still open a fresh box.log below.
+  }
   LoggerController.init(container.read(logPathResolverProvider).appFile().path);
 
   final appInfo = await _init("app info", () => container.read(appInfoProvider.future));

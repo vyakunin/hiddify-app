@@ -44,7 +44,23 @@ class ConsolePrinter extends LoggyPrinter {
 }
 
 class FileLogPrinter extends LoggyPrinter {
-  FileLogPrinter(String filePath, {this.minLevel = LogLevel.debug}) : _logFile = File(filePath);
+  // Rotate previous session's log to <path>.prev before opening fresh.
+  // The current-session writer is FileMode.writeOnly (truncating); without
+  // rotation, a crash one session ago is unrecoverable by the time the user
+  // reopens the app and taps "Поделиться логами". LogBundle picks up
+  // <path>.prev so the operator sees both halves.
+  FileLogPrinter(String filePath, {this.minLevel = LogLevel.debug}) : _logFile = File(filePath) {
+    try {
+      final f = File(filePath);
+      if (f.existsSync()) {
+        final prev = File("$filePath.prev");
+        if (prev.existsSync()) prev.deleteSync();
+        f.renameSync(prev.path);
+      }
+    } catch (_) {
+      // rotation failed; new log will still open below.
+    }
+  }
 
   final File _logFile;
   final LogLevel minLevel;

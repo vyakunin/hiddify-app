@@ -16,24 +16,37 @@ class LogBundle {
 
   /// Build a single combined log file in app cache and return its path.
   ///
-  /// Layout — clearly sectioned so it's obvious to a human reader (or a
-  /// remote operator receiving the file via Telegram) which side a given
-  /// entry came from:
+  /// Sections, in order — keeps the most operator-actionable content at the
+  /// top so the first paragraph the operator reads carries the crash:
   ///
   ///     ===== family_vpn — combined log =====
   ///     generated: <iso utc>
-  ///     device tz: <local now>
+  ///     device tz:  <local now>
   ///
-  ///     ----- app log (Flutter side) -----
+  ///     ----- previous session: app log -----
+  ///     <app.log.prev contents (if present)>
+  ///
+  ///     ----- previous session: core log -----
+  ///     <box.log.prev contents (if present)>
+  ///
+  ///     ----- crash reports (<dir>/crashes/, newest first) -----
+  ///     <each crash_*.txt>
+  ///
+  ///     ----- previously-shared crash reports (crashes/sent/) -----
+  ///     <each crash_*.txt — sometimes useful when in-app share is the only
+  ///      channel back to the operator and the user shared past crashes via
+  ///      the system share sheet but the operator never received them>
+  ///
+  ///     ----- current session: app log -----
   ///     <app.log contents>
   ///
-  ///     ----- core log (sing-box / xray) -----
+  ///     ----- current session: core log -----
   ///     <box.log contents>
   ///
-  /// We deliberately keep both halves verbatim instead of trying to merge
-  /// them by timestamp — app.log has `HH:MM:SS.mmm` only (no date), box.log
-  /// has its own sing-box timestamp shape, and a partial parse would be
-  /// worse than two clearly delimited sections.
+  /// We deliberately keep timestamps verbatim instead of merging — app.log
+  /// has HH:MM:SS.mmm only (no date), box.log has its own sing-box shape,
+  /// crash reports have ISO timestamps. A partial parse would be worse than
+  /// cleanly delimited sections.
   Future<File> buildCombinedFile() async {
     final cacheDir = await getApplicationCacheDirectory();
     final stamp = DateTime.now()
@@ -50,12 +63,35 @@ class LogBundle {
       sink.writeln("device tz:  ${DateTime.now()}");
       sink.writeln("");
 
-      sink.writeln("----- app log (Flutter side) -----");
-      await _streamFileInto(sink, resolver.appFile());
+      final appFile = resolver.appFile();
+      final coreFile = resolver.coreFile();
+      final appPrev = File("${appFile.path}.prev");
+      final corePrev = File("${coreFile.path}.prev");
+
+      sink.writeln("----- previous session: app log -----");
+      await _streamFileInto(sink, appPrev);
       sink.writeln("");
 
-      sink.writeln("----- core log (sing-box / xray) -----");
-      await _streamFileInto(sink, resolver.coreFile());
+      sink.writeln("----- previous session: core log -----");
+      await _streamFileInto(sink, corePrev);
+      sink.writeln("");
+
+      final crashDir = Directory(p.join(resolver.directory.path, "crashes"));
+      sink.writeln("----- crash reports (${crashDir.path}, newest first) -----");
+      await _streamCrashDir(sink, crashDir);
+      sink.writeln("");
+
+      final sentDir = Directory(p.join(crashDir.path, "sent"));
+      sink.writeln("----- previously-shared crash reports (${sentDir.path}) -----");
+      await _streamCrashDir(sink, sentDir);
+      sink.writeln("");
+
+      sink.writeln("----- current session: app log -----");
+      await _streamFileInto(sink, appFile);
+      sink.writeln("");
+
+      sink.writeln("----- current session: core log -----");
+      await _streamFileInto(sink, coreFile);
       sink.writeln("");
     } finally {
       await sink.flush();
@@ -75,6 +111,28 @@ class LogBundle {
       }
     } catch (e) {
       sink.writeln("(error reading ${source.path}: $e)");
+    }
+  }
+
+  Future<void> _streamCrashDir(IOSink sink, Directory dir) async {
+    if (!dir.existsSync()) {
+      sink.writeln("(none)");
+      return;
+    }
+    final files = dir
+        .listSync(followLinks: false)
+        .whereType<File>()
+        .where((f) => p.basename(f.path).endsWith(".txt"))
+        .toList();
+    if (files.isEmpty) {
+      sink.writeln("(none)");
+      return;
+    }
+    files.sort((a, b) => b.statSync().modified.compareTo(a.statSync().modified));
+    for (final f in files) {
+      sink.writeln("--- ${p.basename(f.path)} (${f.statSync().modified.toIso8601String()}) ---");
+      await _streamFileInto(sink, f);
+      sink.writeln("");
     }
   }
 }
