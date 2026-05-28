@@ -10,7 +10,6 @@ import android.net.wifi.WifiManager
 import android.os.PowerManager
 import androidx.core.content.getSystemService
 import com.hiddify.hiddify.bg.AppChangeReceiver
-import go.Seq
 import com.hiddify.hiddify.Application as BoxApplication
 
 class Application : Application() {
@@ -32,7 +31,12 @@ class Application : Application() {
         // handler time). Idempotent across launches.
         CrashReporter.checkPastCrashes(this)
 
-        Seq.setContext(this)
+        // family_vpn fork: Seq.setContext deliberately NOT called here.
+        // Moved to MainActivity.onCreate so Application survives even when
+        // libhiddify-core fails to dlopen (e.g. ABI mismatch on entry-level
+        // Unisoc/Android Go ROMs). When Application crashes here the OS
+        // never reaches any Activity → DiagnoseActivity (no-gomobile) can
+        // still launch, read filesDir/crashes/*.txt, and ship the dump.
 
         registerReceiver(AppChangeReceiver(), IntentFilter().apply {
             addAction(Intent.ACTION_PACKAGE_ADDED)

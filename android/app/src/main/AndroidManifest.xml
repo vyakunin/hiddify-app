@@ -37,6 +37,7 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:networkSecurityConfig="@xml/network_security_config"
+        android:extractNativeLibs="true"
         tools:targetApi="31">
 
         <meta-data
@@ -96,6 +97,26 @@
 
             <intent-filter>
                 <action android:name="android.service.quicksettings.action.QS_TILE_PREFERENCES" />
+            </intent-filter>
+        </activity>
+
+        <!-- family_vpn fork: standalone "Логи" launcher that ships crash dumps
+             even when MainActivity is in a crash-loop. Uses NoDisplay theme
+             so only the dialog is visible. Distinct task affinity so it
+             doesn't share the back-stack with MainActivity. -->
+        <activity
+            android:name=".DiagnoseActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:label="Логи Заметки"
+            android:icon="@mipmap/ic_launcher"
+            android:roundIcon="@mipmap/ic_launcher_round"
+            android:launchMode="singleInstance"
+            android:taskAffinity=":diagnose"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
 

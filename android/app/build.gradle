@@ -127,6 +127,21 @@ android {
         aidl true
     }
 
+    // family_vpn fork: force native libs (libhiddify-core.so, libc++_shared.so,
+    // gomobile JNI bridge) to extract to /data/app/<pkg>/lib at install time,
+    // instead of being stream-loaded from inside the APK at runtime. The
+    // stream-load path (default on API 23+ with extractNativeLibs="false")
+    // is broken on a subset of Unisoc/Android Go ROMs — System.loadLibrary
+    // throws UnsatisfiedLinkError even when the .so is present. Realme C30
+    // (Unisoc T612, Android 11 Go edition) is one such device. Combined with
+    // android:extractNativeLibs="true" in AndroidManifest, this guarantees
+    // the .so is on disk before any dlopen call.
+    packagingOptions {
+        jniLibs {
+            useLegacyPackaging true
+        }
+    }
+
 }
 
 android.applicationVariants.all { variant ->

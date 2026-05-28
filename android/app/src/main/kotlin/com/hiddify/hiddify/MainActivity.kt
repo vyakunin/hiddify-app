@@ -18,6 +18,7 @@ import com.hiddify.hiddify.bg.ServiceNotification
 import com.hiddify.hiddify.constant.Alert
 import com.hiddify.hiddify.constant.ServiceMode
 import com.hiddify.hiddify.constant.Status
+import go.Seq
 import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import kotlinx.coroutines.Dispatchers
@@ -48,6 +49,24 @@ class MainActivity : FlutterFragmentActivity(), ServiceConnection.Callback {
         // dialog before Flutter has a chance to fail again. Runs even if
         // configureFlutterEngine never gets called.
         CrashReporter.shareCrashesIfAny(this)
+
+        // family_vpn fork: load gomobile (libhiddify-core.so) here, not in
+        // Application.onCreate. If System.loadLibrary fails (ABI mismatch
+        // on Unisoc/Android Go, missing libc++_shared, page-size, etc.) the
+        // JVM uncaught handler writes a crash dump to filesDir/crashes/,
+        // Application stays alive, and DiagnoseActivity can ship the dump
+        // on the user's next tap of the "Логи" launcher icon. If we kept
+        // Seq.setContext in Application, the dump never reaches the user
+        // because no Activity ever launches.
+        try {
+            Seq.setContext(this.applicationContext)
+        } catch (t: Throwable) {
+            Log.e(TAG, "Seq.setContext failed — surfacing crash dialog", t)
+            // Re-throw so the JVM uncaught handler writes a proper dump
+            // (this Activity is going to die either way; better to die
+            // with a recorded reason than silently).
+            throw t
+        }
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {

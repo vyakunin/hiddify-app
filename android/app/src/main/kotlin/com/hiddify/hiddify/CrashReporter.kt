@@ -140,10 +140,18 @@ object CrashReporter {
      * Offer to send any unsent crash reports. Call from Activity.onCreate
      * AFTER super.onCreate AND AFTER checkPastCrashes (so freshly-detected
      * native crashes are included on this same launch).
+     *
+     * @param onDone optional callback fired once the dialog is dismissed
+     * (any reason). Used by DiagnoseActivity to finish() after the user
+     * either ships the reports or chooses Later. MainActivity passes
+     * null since it stays alive regardless.
      */
-    fun shareCrashesIfAny(activity: Activity) {
+    fun shareCrashesIfAny(activity: Activity, onDone: (() -> Unit)? = null) {
         val crashes = listUnsent(activity)
-        if (crashes.isEmpty()) return
+        if (crashes.isEmpty()) {
+            onDone?.invoke()
+            return
+        }
         try {
             val theme = android.R.style.Theme_DeviceDefault_Light_Dialog_Alert
             val n = crashes.size
@@ -157,9 +165,33 @@ object CrashReporter {
                 .setPositiveButton("Отправить") { _, _ -> fireShare(activity, crashes) }
                 .setNegativeButton("Позже", null)
                 .setCancelable(true)
+                .setOnDismissListener { onDone?.invoke() }
                 .show()
         } catch (t: Throwable) {
             Log.e(TAG, "share dialog threw", t)
+            onDone?.invoke()
+        }
+    }
+
+    /**
+     * Show a "no crashes recorded" dialog. Used by DiagnoseActivity when
+     * the user taps the launcher icon but there's nothing to send.
+     */
+    fun showNoCrashesDialog(activity: Activity, onDone: () -> Unit) {
+        try {
+            val theme = android.R.style.Theme_DeviceDefault_Light_Dialog_Alert
+            AlertDialog.Builder(activity, theme)
+                .setTitle("Логи Заметки")
+                .setMessage(
+                    "Нет отчётов об ошибках. Если приложение работает плохо — " +
+                    "откройте Заметки и нажмите 'Поделиться логами'."
+                )
+                .setPositiveButton("OK") { _, _ -> }
+                .setOnDismissListener { onDone() }
+                .show()
+        } catch (t: Throwable) {
+            Log.e(TAG, "no-crashes dialog threw", t)
+            onDone()
         }
     }
 
