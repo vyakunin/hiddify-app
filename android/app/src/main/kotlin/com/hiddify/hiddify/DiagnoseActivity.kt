@@ -16,7 +16,7 @@ import android.os.Bundle
  * Behaviour:
  *  - On launch, scan filesDir/crashes for unsent reports (the same path
  *    CrashReporter writes to).
- *  - If any exist, show the standard "Отправить Володе?" dialog.
+ *  - If any exist, show the standard "Помочь починить?" dialog.
  *  - If none, show "Нет отчётов об ошибках" so the user knows the tap
  *    landed (vs the activity silently flickering closed).
  *  - In both cases, finish() once the dialog is dismissed — no UI to leave

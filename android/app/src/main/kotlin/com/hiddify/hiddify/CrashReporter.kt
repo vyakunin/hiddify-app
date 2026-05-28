@@ -160,7 +160,7 @@ object CrashReporter {
                 .setMessage(
                     "Приложение в прошлый раз закрылось с ошибкой " +
                     "($n ${pluralRu(n, "отчёт", "отчёта", "отчётов")}). " +
-                    "Отправить Володе, чтобы починить?"
+                    "Помочь починить?"
                 )
                 .setPositiveButton("Отправить") { _, _ -> fireShare(activity, crashes) }
                 .setNegativeButton("Позже", null)
