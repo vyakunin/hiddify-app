@@ -32,7 +32,12 @@ abstract class UriUtils {
   static Future<bool> tryShareFile(Uri uri, {String? mimeType}) async {
     try {
       loggy.debug("sharing [$uri]");
-      final file = XFile(uri.path, mimeType: mimeType);
+      // Default to */* so Telegram accepts the file as a generic document.
+      // Its inline text/plain receiver rejects .txt log bundles with
+      // "unsupported format"; same root cause as the crash-share fix in
+      // CrashReporter.kt (commit b21ccd0a, 40119). WhatsApp / Gmail / Files
+      // all accept */* fine.
+      final file = XFile(uri.path, mimeType: mimeType ?? "*/*");
       final result = await Share.shareXFiles([file]);
       loggy.debug("share result: ${result.raw}");
       return result.status == ShareResultStatus.success;
