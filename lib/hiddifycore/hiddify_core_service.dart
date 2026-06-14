@@ -484,12 +484,10 @@ class HiddifyCoreService with InfraLogger {
       () => cc
           .coreInfoListener(Empty(), options: grpcOptions)
           .doOnCancel(() {
-            // quiet: bg core not yet running — cancel is expected, log at debug.
-            if (quiet) {
-              loggy.debug("status", "Cancelled (bg not started)");
-            } else {
-              loggy.error("status", "Canceld");
-            }
+            // Status-listener cancellation is a normal lifecycle event — the
+            // stream is torn down + replaced on every core start/stop. Never an
+            // error; log at debug so it doesn't pollute the launch log.
+            loggy.debug("status", "cancelled");
             if (currentState == const CoreStatus.started()) currentState = const CoreStatus.stopped();
           })
           .doOnData((event) {
@@ -497,11 +495,9 @@ class HiddifyCoreService with InfraLogger {
             if (currentState == const CoreStatus.started()) currentState = const CoreStatus.stopped();
           })
           .doOnDone(() {
-            if (quiet) {
-              loggy.debug("status", "done (bg not started)");
-            } else {
-              loggy.error("status", "done");
-            }
+            // Stream completion (endWith STOPPED) fires on every teardown — not
+            // an error.
+            loggy.debug("status", "done");
             if (currentState == const CoreStatus.started()) currentState = const CoreStatus.stopped();
           })
           .endWith(CoreInfoResponse(coreState: CoreStates.STOPPED))
@@ -512,8 +508,8 @@ class HiddifyCoreService with InfraLogger {
           }),
       // .endWith(const CoreStatus.stopped())
       onError: (error) {
-        if (quiet) {
-          loggy.debug("Stream error in ${key}StatusListener (bg not started): $error");
+        if (quiet || _isExpectedUnavailable(error)) {
+          loggy.debug("Stream error in ${key}StatusListener (bg not running): $error");
         } else {
           loggy.error("Stream error in ${key}StatusListener: $error");
         }
@@ -521,6 +517,16 @@ class HiddifyCoreService with InfraLogger {
       quiet: quiet,
     );
   }
+
+  /// A gRPC UNAVAILABLE / "Connection refused" on a loopback core socket only
+  /// ever means the background core process isn't listening yet (or has been
+  /// torn down) — never independently actionable, so it's logged at debug
+  /// instead of flooding the launch log with [E]. Genuine core failures surface
+  /// via CoreStatus + ConnectionDiagnostics, not this socket-level error. This
+  /// covers the long-lived non-quiet listener started by watchStatus(), which
+  /// the home screen subscribes to before the core is up.
+  bool _isExpectedUnavailable(dynamic error) =>
+      error is GrpcError && error.code == StatusCode.unavailable;
 
   Future<void> startListeningLogs(String key, CoreClient cc) async {
     final logLevel = ref.read(ConfigOptions.logLevel);
@@ -579,8 +585,8 @@ class HiddifyCoreService with InfraLogger {
       onError: (error) {
         // quiet: expected transient failure (e.g. bg core not running yet);
         // log at debug so the launch log isn't flooded with [E] noise.
-        if (quiet) {
-          loggy.debug('Stream error (expected, bg not started): $error');
+        if (quiet || _isExpectedUnavailable(error)) {
+          loggy.debug('Stream error (expected, bg not running): $error');
         } else {
           loggy.log(loggyl.LogLevel.error, 'Stream error: $error');
         }
