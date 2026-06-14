@@ -230,8 +230,21 @@ class HiddifyCoreService with InfraLogger {
           );
         }
       } on GrpcError catch (e) {
-        loggy.error("failed to start bg core: $e");
         ref.read(coreRestartSignalProvider.notifier).restart();
+        // Same VpnService-consent race as the res.message "denied" branch
+        // above, but here the core THROWS it as a gRPC error (code UNKNOWN:
+        // "manager start inbound/tun[tun-in]: configure tun interface:
+        // permission denied") rather than returning it — so the res.message
+        // check never sees it. Without this branch the failure surfaces as the
+        // scary "Непредвиденный сбой / failed to start background core" modal
+        // when a cautious user taps Cancel on the VPN-permission dialog and
+        // then Connect. Surface as MissingVpnPermission so the connection
+        // notifier re-triggers the consent dialog instead (no error modal).
+        if (e.message?.contains("denied") ?? false) {
+          loggy.debug("bg core start: tun permission denied — returning MissingVpnPermission (no error modal)");
+          return left(ConnectionFailure.missingVpnPermission(e.message ?? "permission denied"));
+        }
+        loggy.error("failed to start bg core: $e");
         return left(const ConnectionFailure.unexpected("failed to start background core"));
       }
 
