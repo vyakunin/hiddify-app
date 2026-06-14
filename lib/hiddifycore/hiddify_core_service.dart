@@ -103,7 +103,9 @@ class HiddifyCoreService with InfraLogger {
           await startListeningLogs("bg", core.bgClient);
         }
         statusController.add(currentState);
-        await startListeningStatus("bg", core.bgClient);
+        // quiet=true: bg core not running yet; gRPC "Connection refused" errors
+        // at [E] are expected here and should not flood the log.
+        await startListeningStatus("bg", core.bgClient, quiet: true);
         // ref.read(coreRestartSignalProvider.notifier).restart();
         return right(unit);
       } catch (e) {
@@ -206,9 +208,19 @@ class HiddifyCoreService with InfraLogger {
         if (res != null &&
             res.messageType != MessageType.ALREADY_STARTED &&
             res.messageType != MessageType.EMPTY) {
-          final alert = res.message.contains("denied") ? CoreAlert.requestVPNPermission : CoreAlert.startFailed;
+          if (res.message.contains("denied")) {
+            // VpnService-consent race: bgClient.start() fires while the Android
+            // VPN-permission dialog is still in-flight (first-launch pre-request
+            // or user tapped Connect before consent resolved). Don't publish
+            // CoreStatus.stopped — that causes a red "Connection Failed" flash
+            // followed 6s later by a clean connect. Instead surface the error
+            // as MissingVpnPermission so the connection notifier's existing
+            // handler re-triggers the dialog and retries without any UI flash.
+            loggy.debug("core start: permission denied — returning MissingVpnPermission (no UI flash)");
+            return left(ConnectionFailure.missingVpnPermission(res.message));
+          }
           currentState = CoreStatus.stopped(
-            alert: alert,
+            alert: CoreAlert.startFailed,
             message: "failed to start core ${res.messageType} ${res.message}",
           );
           statusController.add(currentState);
@@ -466,13 +478,18 @@ class HiddifyCoreService with InfraLogger {
     // .endWith(const CoreStatus.stopped());
   }
 
-  Future<void> startListeningStatus(String key, CoreClient cc) async {
+  Future<void> startListeningStatus(String key, CoreClient cc, {bool quiet = false}) async {
     await listenSingle<CoreStatus>(
       "${key}StatusListener",
       () => cc
           .coreInfoListener(Empty(), options: grpcOptions)
           .doOnCancel(() {
-            loggy.error("status", "Canceld");
+            // quiet: bg core not yet running — cancel is expected, log at debug.
+            if (quiet) {
+              loggy.debug("status", "Cancelled (bg not started)");
+            } else {
+              loggy.error("status", "Canceld");
+            }
             if (currentState == const CoreStatus.started()) currentState = const CoreStatus.stopped();
           })
           .doOnData((event) {
@@ -480,7 +497,11 @@ class HiddifyCoreService with InfraLogger {
             if (currentState == const CoreStatus.started()) currentState = const CoreStatus.stopped();
           })
           .doOnDone(() {
-            loggy.error("status", "done");
+            if (quiet) {
+              loggy.debug("status", "done (bg not started)");
+            } else {
+              loggy.error("status", "done");
+            }
             if (currentState == const CoreStatus.started()) currentState = const CoreStatus.stopped();
           })
           .endWith(CoreInfoResponse(coreState: CoreStates.STOPPED))
@@ -491,13 +512,13 @@ class HiddifyCoreService with InfraLogger {
           }),
       // .endWith(const CoreStatus.stopped())
       onError: (error) {
-        loggy.error("Stream error in ${key}StatusListener: $error");
-
-        // currentState = const CoreStatus.stopped();
-        // statusController.add(currentState);
-
-        // startListeningStatus(key, cc);
+        if (quiet) {
+          loggy.debug("Stream error in ${key}StatusListener (bg not started): $error");
+        } else {
+          loggy.error("Stream error in ${key}StatusListener: $error");
+        }
       },
+      quiet: quiet,
     );
   }
 
@@ -543,6 +564,7 @@ class HiddifyCoreService with InfraLogger {
     String key,
     Stream<T> Function() stream, {
     Function(dynamic error)? onError,
+    bool quiet = false,
   }) async {
     if (subscriptions.containsKey(key)) {
       // return subscriptions[key] as StreamSubscription<T>?;
@@ -555,7 +577,13 @@ class HiddifyCoreService with InfraLogger {
       },
       cancelOnError: true,
       onError: (error) {
-        loggy.log(loggyl.LogLevel.error, 'Stream error: $error');
+        // quiet: expected transient failure (e.g. bg core not running yet);
+        // log at debug so the launch log isn't flooded with [E] noise.
+        if (quiet) {
+          loggy.debug('Stream error (expected, bg not started): $error');
+        } else {
+          loggy.log(loggyl.LogLevel.error, 'Stream error: $error');
+        }
         onError?.call(error);
         subscriptions[key]?.cancel();
         subscriptions.remove(key);
