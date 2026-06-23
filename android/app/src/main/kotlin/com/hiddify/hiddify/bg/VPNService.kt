@@ -75,6 +75,8 @@ class VPNService : VpnService(), PlatformInterfaceWrapper {
     }
 
     override fun openTun(options: TunOptions): Int {
+        BoxService.diag("openTun: begin (mtu=${options.mtu} autoRoute=${options.autoRoute} " +
+            "sdk=${Build.VERSION.SDK_INT})")
         var hasPermission = false
         for (i in 0 until 20) {
             if (prepare(this) != null) {
@@ -87,6 +89,7 @@ class VPNService : VpnService(), PlatformInterfaceWrapper {
         }
 
         if (!hasPermission) {
+             BoxService.diag("openTun: ABORT — missing vpn permission after 20 tries")
              error("android: missing vpn permission")
     }
 //        service.fileDescriptor?.close()
@@ -207,8 +210,12 @@ class VPNService : VpnService(), PlatformInterfaceWrapper {
             systemProxyEnabled = false
         }
 
-        val pfd = builder.establish() ?: error("android: the application is not prepared or is revoked")
+        val pfd = builder.establish() ?: run {
+            BoxService.diag("openTun: ABORT — builder.establish() returned null (not prepared / revoked)")
+            error("android: the application is not prepared or is revoked")
+        }
         service.fileDescriptor = pfd
+        BoxService.diag("openTun: established (fd=${pfd.fd})")
         return pfd.fd
     }
 

@@ -117,6 +117,28 @@ class BoxService(
             )
         }
 
+        // family_vpn fork: persistent, timestamped start-sequence diagnostics.
+        // Appended to workingDir/core_start.log (collected by LogBundle) AND
+        // mirrored to logcat. This is the artifact that finally makes a
+        // tunnel-START failure diagnosable remotely: box.log is empty when the
+        // core dies before logging, logcat can rotate before the user shares,
+        // and the Dart alert only carries e.message — none capture WHERE the
+        // start sequence died or the full native stacktrace. core_start.log
+        // does, persistently. Best-effort; never throws. (Roza realme C30 v7a
+        // connect-spin, 2026-06-23.)
+        fun diag(msg: String, e: Throwable? = null) {
+            if (e != null) Log.e(TAG, msg, e) else Log.d(TAG, msg)
+            try {
+                val dir = Settings.workingDir
+                if (dir.isBlank()) return
+                val ts = java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.US)
+                    .format(java.util.Date())
+                val body = if (e != null) "$msg\n${Log.getStackTraceString(e)}" else msg
+                File(dir, "core_start.log").appendText("$ts $body\n")
+            } catch (_: Throwable) {
+            }
+        }
+
 
     }
 
@@ -151,12 +173,18 @@ class BoxService(
         try {
             status.postValue(Status.Starting)
             Log.d(TAG, "starting service")
+            diag("startService: begin (profile='${Settings.activeProfileName}' " +
+                "configPath='${Settings.activeConfigPath.takeLast(48)}' " +
+                "grpcPort=${Settings.grpcServiceModePort} debug=${Settings.debugMode} " +
+                "memLimit=${!Settings.disableMemoryLimit} " +
+                "startCoreAfter=${Settings.startCoreAfterStartingService})")
             withContext(Dispatchers.Main) {
                 notification.show(activeProfileName, R.string.status_starting)
             }
 
             val selectedConfigPath = Settings.activeConfigPath
             if (selectedConfigPath.isBlank()) {
+                diag("startService: ABORT — active config path is blank (EmptyConfiguration)")
                 stopAndAlert(Alert.EmptyConfiguration)
                 return
             }
@@ -172,6 +200,7 @@ class BoxService(
 
             DefaultNetworkMonitor.start()
             Libbox.setMemoryLimit(!Settings.disableMemoryLimit)
+            diag("Mobile.setup: calling (mode=4)")
             val newService = try {
                 Mobile.setup(
                     SetupOptions().also {
@@ -189,16 +218,20 @@ class BoxService(
 //                Libbox.newService(content,platformInterface)
 
             } catch (e: Exception) {
+                diag("Mobile.setup: THREW", e)
                 stopAndAlert(Alert.CreateService, e.message)
                 return
             }
+            diag("Mobile.setup: ok")
             status.postValue(Status.Started)
             // family_vpn fork: stamp tunnel-up timestamp (Kotlin-authoritative,
             // survives Activity rebuilds / Dart stream re-subscriptions).
             Settings.connectedSinceMs = System.currentTimeMillis()
 
             if (Settings.startCoreAfterStartingService){
+                diag("Mobile.start: calling")
                 Mobile.start("","")
+                diag("Mobile.start: returned")
                 }
 //            if (delayStart) {
 //                delay(1000L)
@@ -213,7 +246,9 @@ class BoxService(
                 notification.show(activeProfileName, R.string.status_started)
             }
             notification.start()
+            diag("startService: COMPLETE (tunnel up)")
         } catch (e: Exception) {
+            diag("startService: THREW (outer)", e)
             stopAndAlert(Alert.StartService, e.message)
             return
         }

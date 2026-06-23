@@ -110,6 +110,14 @@ class LogBundle {
       await _streamFileInto(sink, coreFile);
       sink.writeln("");
 
+      // family_vpn fork: the start-sequence trace — the FIRST thing to read for
+      // a tunnel-start failure. Phase markers + full stacktraces pinpoint where
+      // BoxService/openTun died, persistently (box.log is empty when the core
+      // dies before logging).
+      sink.writeln("----- current session: core start trace (core_start.log) -----");
+      await _streamFileInto(sink, resolver.coreStartFile());
+      sink.writeln("");
+
       // family_vpn fork: the core's Go stderr. When the tunnel fails to START
       // (core loads but Mobile.setup/start throws, OOM, gvisor/tun-establish
       // failure), box.log is empty and the real cause lands HERE as a Go panic

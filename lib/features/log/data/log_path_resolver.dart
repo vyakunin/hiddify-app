@@ -36,4 +36,14 @@ class LogPathResolver {
   File logcatFile() {
     return File(p.join(directory.path, "logcat.log"));
   }
+
+  // family_vpn fork: persistent, timestamped start-sequence diagnostics written
+  // by BoxService.diag() — phase markers (startService begin → Mobile.setup →
+  // Mobile.start → openTun establish → COMPLETE) and full stacktraces on any
+  // failure. The definitive artifact for a tunnel-START failure: unlike box.log
+  // (empty when the core dies pre-logging) or logcat (rotates), this persists
+  // and pinpoints exactly where the start sequence died.
+  File coreStartFile() {
+    return File(p.join(directory.path, "core_start.log"));
+  }
 }
