@@ -46,6 +46,14 @@ class MethodHandler(private val scope: CoroutineScope) : FlutterPlugin,
             // own).
             GetConnectedSinceMs("get_connected_since_ms"),
 
+            // family_vpn fork: dump this process's own logcat to
+            // workingDir/logcat.log so LogBundle can ship it. Captures the
+            // Kotlin BoxService logs ("starting service", caught Mobile.setup/
+            // start exceptions) and any system kill/ANR lines for our UID that
+            // never reach the Dart app.log — the missing half of a remote
+            // tunnel-start failure (Roza realme C30, 2026-06-23).
+            DumpLogcat("dump_logcat"),
+
         }
     }
 
@@ -155,6 +163,33 @@ class MethodHandler(private val scope: CoroutineScope) : FlutterPlugin,
 
             Trigger.GetConnectedSinceMs.method -> {
                 result.success(Settings.connectedSinceMs)
+            }
+
+            Trigger.DumpLogcat.method -> {
+                GlobalScope.launch(Dispatchers.IO) {
+                    result.runCatching {
+                        try {
+                            val out = File(Settings.workingDir, "logcat.log")
+                            // -d: dump and exit; -t 4000: last 4000 lines (bounds
+                            // size); -v threadtime: timestamps + pid/tid. On modern
+                            // Android an unprivileged app only sees its own UID's
+                            // logs, which is exactly what we want.
+                            val proc = ProcessBuilder(
+                                "logcat", "-d", "-t", "4000", "-v", "threadtime"
+                            ).redirectErrorStream(true).start()
+                            proc.inputStream.use { ins ->
+                                out.outputStream().use { os -> ins.copyTo(os) }
+                            }
+                            proc.waitFor()
+                            success(out.path)
+                        } catch (e: Exception) {
+                            // Best-effort: never let a logcat-dump failure break
+                            // the share-logs flow.
+                            Log.w(TAG, "dump_logcat failed: ${e.message}")
+                            success("")
+                        }
+                    }
+                }
             }
 
             Trigger.Stop.method -> {

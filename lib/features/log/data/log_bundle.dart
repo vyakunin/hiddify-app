@@ -5,6 +5,7 @@
 
 import 'dart:io';
 
+import 'package:flutter/services.dart';
 import 'package:hiddify/features/log/data/log_path_resolver.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -47,7 +48,22 @@ class LogBundle {
   /// has HH:MM:SS.mmm only (no date), box.log has its own sing-box shape,
   /// crash reports have ISO timestamps. A partial parse would be worse than
   /// cleanly delimited sections.
+  // family_vpn fork: native method channel (mirrors CoreInterfaceMobile's).
+  // Used to ask the Kotlin side to dump this process's own logcat to
+  // workingDir/logcat.log right before we assemble the bundle.
+  static const _methodChannel = MethodChannel("com.hiddify.app/method");
+
   Future<File> buildCombinedFile() async {
+    // Best-effort: refresh logcat.log before assembling. Never let a failure
+    // here (old build without the handler, permission quirk) block the share.
+    try {
+      await _methodChannel
+          .invokeMethod("dump_logcat")
+          .timeout(const Duration(seconds: 4));
+    } catch (_) {
+      // ignore — the logcat section will just say "(file missing)".
+    }
+
     final cacheDir = await getApplicationCacheDirectory();
     final stamp = DateTime.now()
         .toIso8601String()
@@ -92,6 +108,29 @@ class LogBundle {
 
       sink.writeln("----- current session: core log -----");
       await _streamFileInto(sink, coreFile);
+      sink.writeln("");
+
+      // family_vpn fork: the core's Go stderr. When the tunnel fails to START
+      // (core loads but Mobile.setup/start throws, OOM, gvisor/tun-establish
+      // failure), box.log is empty and the real cause lands HERE as a Go panic
+      // / `runtime: out of memory` / native fatal. Two files because the fork
+      // redirects stderr in two places (BoxService.initialize → stderr.log,
+      // MethodHandler → stderr2.log).
+      sink.writeln("----- current session: core stderr (stderr.log) -----");
+      await _streamFileInto(sink, resolver.stderrFile());
+      sink.writeln("");
+
+      sink.writeln("----- current session: core stderr (stderr2.log) -----");
+      await _streamFileInto(sink, resolver.stderr2File());
+      sink.writeln("");
+
+      // family_vpn fork: own-process logcat, dumped by the native side just
+      // before this bundle is built (see MethodHandler "dump_logcat"). Captures
+      // BoxService Kotlin logs ("starting service", caught setup/start
+      // exceptions) + any system kill/ANR lines for our UID that never reach
+      // the Dart app.log.
+      sink.writeln("----- current session: logcat (own process) -----");
+      await _streamFileInto(sink, resolver.logcatFile());
       sink.writeln("");
     } finally {
       await sink.flush();
