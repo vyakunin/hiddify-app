@@ -59,8 +59,19 @@ class BoxService(
         private var initializeOnce = false
         private lateinit var workingDir: File
         private fun initialize() {
-            System.setProperty("GODEBUG", "efence=1,stacktraceback=2");
-            System.setProperty("GOGC", "off");
+            // family_vpn fork: removed upstream debug leftovers
+            //   System.setProperty("GODEBUG", "efence=1,stacktraceback=2")
+            //   System.setProperty("GOGC", "off")
+            // (introduced by the upstream `v3` commit). efence puts every Go
+            // allocation on its own page and GOGC=off disables GC entirely —
+            // both catastrophic for memory if they reach the runtime. In
+            // practice they're no-ops here (System.setProperty sets a JVM
+            // property; the Go runtime reads GODEBUG from the C environment at
+            // init, not JVM properties — and if efence were live it would
+            // balloon memory on every device, which the working arm64 clients
+            // do not show). Removed regardless: shipping a debug allocator /
+            // GC-off flag in a release build is a landmine, and removal is
+            // strictly memory-neutral-or-better for all ABIs. (2026-06-23)
             if (initializeOnce) return
             val baseDir = Application.application.filesDir
 
