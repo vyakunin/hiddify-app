@@ -58,12 +58,16 @@ endif
 # family_vpn slim build: override CORE_URL to use the stripped sing-box build
 # from vyakunin/hiddify-core. Drops with_quic / with_wireguard / with_awg /
 # with_naive_outbound and removes the upstream `-gcflags "all=-N -l"` debug
-# flag — arm64 .so goes from ~78 MB to ~52 MB. AAR is arm64-only.
+# flag — arm64 .so ~54 MB, v7a .so ~51 MB.
 ifeq ($(CHANNEL),slim)
-	# Pin to slim.1: the verified-working baseline (with_clash_api +
-	# with_grpc still in). slim.2 dropped both, saved only 88 KB, and
-	# wasn't worth the FFI risk so we don't promote it.
-	CORE_URL=https://github.com/vyakunin/hiddify-core/releases/download/v4.1.0-slim.1
+	# Pin to slim-multiabi.1: same stripped sing-box tag set as the verified
+	# slim.1 baseline (with_clash_api + with_grpc still in), but cross-compiled
+	# for BOTH armeabi-v7a + arm64-v8a. DO NOT REVERT to an arm64-only slim
+	# release: Roza's realme C30 runs a 32-bit (v7a) userspace and Play serves
+	# it the v7a split — an arm64-only core ships that split coreless and the
+	# app dies at go.Seq.<clinit> UnsatisfiedLinkError (see family_vpn.md
+	# "Roza — realme C30"). Any future slim release MUST carry a v7a core .so.
+	CORE_URL=https://github.com/vyakunin/hiddify-core/releases/download/v4.1.0-slim-multiabi.1
 endif
 
 ifeq ($(CHANNEL),prod)
