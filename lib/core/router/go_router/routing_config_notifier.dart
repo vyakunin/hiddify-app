@@ -58,6 +58,15 @@ class RoutingConfigNotifier extends _$RoutingConfigNotifier {
     final isMobileBreakpoint = ref.watch(isMobileBreakpointProvider);
     final bool showProfilesAction;
     if (isMobileBreakpoint == true) {
+      // family_vpn fork: WATCH hasAnyProfileProvider on mobile too (even though
+      // showProfilesAction stays false here) so this notifier — and therefore
+      // the GoRouter's RoutingConfig — REBUILDS when the first profile is
+      // added. The OAuth/baked first-launch flow relies on the redirect below
+      // re-firing (hasProfile && isOauth → /home). Without this watch, on a
+      // phone the notifier never rebuilds after upsertRemote, the redirect is
+      // never re-evaluated, and the Sign-in-with-Google page spins forever on
+      // /oauth-signin even though the profile imported fine.
+      ref.watch(hasAnyProfileProvider);
       showProfilesAction = false;
     } else {
       showProfilesAction = ref.watch(hasAnyProfileProvider).value ?? false;
