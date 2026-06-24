@@ -34,6 +34,40 @@ class _OauthSigninPageState extends ConsumerState<OauthSigninPage> {
     scopes: const ["email"],
   );
 
+  @override
+  void initState() {
+    super.initState();
+    // Try a silent (no-UI) sign-in first. After a reinstall the device is
+    // still signed into Google at the OS level, so Play Services can usually
+    // resolve a previously-granted account without showing the chooser. If it
+    // succeeds we complete the whole flow hands-free; if it returns null the
+    // interactive button is revealed and the user taps once.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _attemptSilent());
+  }
+
+  Future<void> _attemptSilent() async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      Logger.bootstrap.info("oauth: attempting signInSilently()");
+      final account = await _signIn.signInSilently();
+      if (account == null) {
+        Logger.bootstrap.info("oauth: silent sign-in returned null — showing interactive button");
+        if (mounted) setState(() => _busy = false);
+        return;
+      }
+      Logger.bootstrap.info("oauth: silent sign-in succeeded (email=${account.email})");
+      await _completeWithAccount(account);
+    } catch (e, s) {
+      // Silent failure is expected (no cached grant, network blip) — fall back
+      // to the interactive button silently, do NOT surface an error.
+      Logger.bootstrap.info("oauth: silent sign-in failed ($e) — showing interactive button", e, s);
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _onSignIn() async {
     setState(() {
       _busy = true;
@@ -54,6 +88,23 @@ class _OauthSigninPageState extends ConsumerState<OauthSigninPage> {
         });
         return;
       }
+      await _completeWithAccount(account);
+    } catch (e, s) {
+      Logger.bootstrap.warning("oauth sign-in failed: $e", e, s);
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _error = "$e";
+        });
+      }
+    }
+  }
+
+  // Shared tail of both the silent and interactive paths: exchange the Google
+  // ID token at the sub_server and import the returned sub URL. Throws on any
+  // failure; callers translate that into _error.
+  Future<void> _completeWithAccount(GoogleSignInAccount account) async {
+    try {
       Logger.bootstrap.info("oauth: got account (email=${account.email})");
       final auth = await account.authentication;
       final idToken = auth.idToken;
